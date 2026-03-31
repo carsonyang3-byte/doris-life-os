@@ -28,20 +28,14 @@ export async function checkPassword(input: string): Promise<boolean> {
 
 /** 设置密码（首次使用时） */
 export async function setPassword(password: string): Promise<boolean> {
-  try {
-    const { error } = await supabase
-      .from('app_data')
-      .upsert({ key: AUTH_KEY, value: password }, { onConflict: 'key' });
-    if (error) {
-      console.error('SetPassword failed:', error.message, 'code:', error.code, 'hint:', error.hint);
-      return false;
-    }
+  const result = await supabaseUpsert(AUTH_KEY, password);
+  if (result.ok) {
     cache[AUTH_KEY] = password;
+    console.log('Password saved successfully');
     return true;
-  } catch (e) {
-    console.error('SetPassword exception:', e);
-    return false;
   }
+  console.error('SetPassword failed:', result.error);
+  return false;
 }
 
 /** 设置/检查 sessionStorage 登录状态 */
@@ -75,6 +69,29 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 }
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+/** 直接用 fetch 调 Supabase REST API 写入（绕过 SDK 可能的序列化问题） */
+async function supabaseUpsert(key: string, value: unknown): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/app_data`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Prefer': 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify({ key, value }),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      return { ok: false, error: `HTTP ${res.status}: ${text}` };
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+}
 
 // 内存缓存，避免每次都请求 Supabase
 const cache: Record<string, string | null> = {};
