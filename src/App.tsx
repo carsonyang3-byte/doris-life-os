@@ -116,19 +116,13 @@ function AuthGate({ isSetup, onAuthenticated }: { isSetup: boolean; onAuthentica
         return;
       }
       setLoading(true);
-      const result = await setPassword(password);
+      const ok = await setPassword(password);
       setLoading(false);
-      if (result.ok) {
-        try {
-          setSession();
-          console.log('Session set, calling onAuthenticated...');
-          onAuthenticated();
-        } catch (e) {
-          console.error('Auth redirect error:', e);
-          setError('登录跳转失败: ' + String(e));
-        }
+      if (ok) {
+        setSession();
+        onAuthenticated();
       } else {
-        setError(result.error || '设置密码失败，请重试');
+        setError('设置密码失败，请检查网络后重试');
       }
     } else {
       setLoading(true);

@@ -26,23 +26,21 @@ export async function checkPassword(input: string): Promise<boolean> {
   }
 }
 
-/** 设置密码（首次使用时） — 用 Supabase SDK 但返回详细错误信息 */
-export async function setPassword(password: string): Promise<{ ok: boolean; error?: string }> {
+/** 设置密码（首次使用时） */
+export async function setPassword(password: string): Promise<boolean> {
   try {
     const { error } = await supabase
       .from('app_data')
       .upsert({ key: AUTH_KEY, value: password }, { onConflict: 'key' });
     if (error) {
-      const msg = `Supabase error: ${error.message} (code: ${error.code}, hint: ${error.hint || 'none'})`;
-      console.error(msg);
-      return { ok: false, error: msg };
+      console.error('SetPassword failed:', error.message, 'code:', error.code, 'hint:', error.hint);
+      return false;
     }
     cache[AUTH_KEY] = password;
-    return { ok: true };
+    return true;
   } catch (e) {
-    const msg = `Exception: ${e instanceof Error ? e.message : String(e)}`;
-    console.error(msg);
-    return { ok: false, error: msg };
+    console.error('SetPassword exception:', e);
+    return false;
   }
 }
 
