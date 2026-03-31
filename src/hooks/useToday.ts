@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useMemo } from 'react';
 import type { TodayRecord, Quote, LibraryItem } from '../types';
 import { QUOTES, DAILY_QUESTIONS } from '../lib/constants';
 import { formatDate, getGreeting } from '../lib/utils';
+import { getItem, setItem } from '../lib/storage';
 
 const TODAY_PREFIX = 'life-os-today-';
 const AWARENESS_PREFIX = 'life-os-awareness-';
@@ -39,7 +40,7 @@ export function useTodayData() {
 
   useEffect(() => {
     try {
-      const data: TodayRecord | null = JSON.parse(localStorage.getItem(TODAY_PREFIX + todayStr) || 'null');
+      const data: TodayRecord | null = JSON.parse(getItem(TODAY_PREFIX + todayStr) || 'null');
       if (data) {
         setTasks(data.tasks.length >= 3 ? data.tasks : [...data.tasks, ...Array(3 - data.tasks.length).fill('')]);
         setHappy(data.happy);
@@ -55,8 +56,8 @@ export function useTodayData() {
       happy,
       awareness,
     };
-    localStorage.setItem(TODAY_PREFIX + todayStr, JSON.stringify(data));
-    if (awareness) localStorage.setItem(AWARENESS_PREFIX + todayStr, '1');
+    setItem(TODAY_PREFIX + todayStr, JSON.stringify(data));
+    if (awareness) setItem(AWARENESS_PREFIX + todayStr, '1');
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
   }, [todayStr, tasks, happy, awareness]);

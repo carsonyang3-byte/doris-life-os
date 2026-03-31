@@ -2,23 +2,24 @@ import { useState, useCallback } from 'react';
 import type { MoneyRecord } from '../types';
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '../lib/constants';
 import { formatDate } from '../lib/utils';
+import { getItem, setItem } from '../lib/storage';
 
 const STORAGE_KEY = 'life-os-money';
 
 function loadRecords(): MoneyRecord[] {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    return JSON.parse(getItem(STORAGE_KEY) || '[]');
   } catch {
     return [];
   }
 }
 
 function saveRecords(records: MoneyRecord[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+  setItem(STORAGE_KEY, JSON.stringify(records));
 }
 
 function seedMoneyData() {
-  if (localStorage.getItem(STORAGE_KEY)) return;
+  if (getItem(STORAGE_KEY)) return;
   const records: MoneyRecord[] = [];
   const rand = (() => {
     let s = 777;

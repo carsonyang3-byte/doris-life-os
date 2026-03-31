@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, CalendarDays, Save, BookOpen } from 'lucide-react';
 import { DAILY_QUESTIONS, WEEKLY_QUESTIONS } from '../lib/constants';
 import { formatDate } from '../lib/utils';
+import { getItem, setItem } from '../lib/storage';
 
 // ---- 数据存储 ----
 
@@ -10,12 +11,12 @@ const REFLECT_WEEKLY_PREFIX = 'life-os-reflect-weekly-';
 
 function loadReflectAnswers(prefix: string): Record<string, string> {
   try {
-    return JSON.parse(localStorage.getItem(prefix) || '{}');
+    return JSON.parse(getItem(prefix) || '{}');
   } catch { return {}; }
 }
 
 function saveReflectAnswers(prefix: string, answers: Record<string, string>) {
-  localStorage.setItem(prefix, JSON.stringify(answers));
+  setItem(prefix, JSON.stringify(answers));
 }
 
 function getWeekKey(date: Date): string {
@@ -277,7 +278,7 @@ export default function ReflectPage() {
       const d = new Date();
       d.setDate(d.getDate() - i);
       const ds = formatDate(d);
-      if (localStorage.getItem(REFLECT_DAILY_PREFIX + ds)) dates.push(ds);
+      if (getItem(REFLECT_DAILY_PREFIX + ds)) dates.push(ds);
     }
     setDailyHistory(dates);
   }, [dailySaved]);

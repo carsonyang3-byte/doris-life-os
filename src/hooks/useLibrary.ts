@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { LibraryItem } from '../types';
+import { getItem, setItem } from '../lib/storage';
 
 const STORAGE_KEY = 'doris_library';
 
 export function useLibrary() {
   const [items, setItems] = useState<LibraryItem[]>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = getItem(STORAGE_KEY);
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -14,7 +15,7 @@ export function useLibrary() {
   });
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    setItem(STORAGE_KEY, JSON.stringify(items));
   }, [items]);
 
   const addItem = (item: Omit<LibraryItem, 'id'>) => {

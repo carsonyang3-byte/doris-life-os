@@ -1,17 +1,18 @@
 import { useState, useCallback } from 'react';
 import type { Goal, Project } from '../types';
 import { DEFAULT_GOALS, DEFAULT_PROJECTS } from '../lib/constants';
+import { getItem, setItem, removeItem } from '../lib/storage';
 
 const GOALS_KEY = 'life-os-goals';
 
 function loadGoals(): Goal[] {
   try {
-    const saved = localStorage.getItem(GOALS_KEY);
+    const saved = getItem(GOALS_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
       // 迁移检查：如果旧数据没有 autoCalc 字段，用新默认值替换
       if (Array.isArray(parsed) && parsed.length > 0 && !parsed[0].autoCalc && DEFAULT_GOALS.some(g => g.autoCalc)) {
-        localStorage.removeItem(GOALS_KEY);
+        removeItem(GOALS_KEY);
         return [...DEFAULT_GOALS];
       }
       return parsed;
@@ -23,7 +24,7 @@ function loadGoals(): Goal[] {
 }
 
 function saveGoals(goals: Goal[]) {
-  localStorage.setItem(GOALS_KEY, JSON.stringify(goals));
+  setItem(GOALS_KEY, JSON.stringify(goals));
 }
 
 export function useGoals() {

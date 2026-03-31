@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { INSIGHTS } from '../lib/constants';
+import { getItem, setItem } from '../lib/storage';
 
 const API_KEY_STORAGE = 'life-os-gemini-key';
 
@@ -14,7 +15,7 @@ function collectUserData(perspective: InsightTab): string {
 
   // 习惯数据
   const habitData: Record<string, Record<string, boolean>> = JSON.parse(
-    localStorage.getItem('life-os-habits') || '{}'
+    getItem('life-os-habits') || '{}'
   );
 
   // 最近 7 天
@@ -54,7 +55,7 @@ function collectUserData(perspective: InsightTab): string {
       const d = new Date(today);
       d.setDate(d.getDate() - i);
       const key = d.toISOString().slice(0, 10);
-      const raw = localStorage.getItem('life-os-today-' + key);
+      const raw = getItem('life-os-today-' + key);
       if (raw) {
         try {
           const parsed = JSON.parse(raw);
@@ -72,7 +73,7 @@ function collectUserData(perspective: InsightTab): string {
   // Reflect 觉察记录（最近或本月）
   if (perspective !== 'finance') {
     const reflectAll: { date: string; q: string; framework: string; answer: string }[] = JSON.parse(
-      localStorage.getItem('life-os-reflect') || '[]'
+      getItem('life-os-reflect') || '[]'
     );
     if (perspective === 'recent') {
       const recent7Date = new Date(today);
@@ -93,7 +94,7 @@ function collectUserData(perspective: InsightTab): string {
   // 财务数据
   if (perspective === 'finance' || perspective === 'monthly') {
     const moneyRecords: { type: string; category: string; categoryLabel: string; amount: number; date: string }[] =
-      JSON.parse(localStorage.getItem('life-os-money') || '[]');
+      JSON.parse(getItem('life-os-money') || '[]');
     if (perspective === 'finance') {
       const monthKey3 = todayStr.slice(0, 7);
       const thisMonth = moneyRecords.filter((r) => r.date.startsWith(monthKey3));
@@ -134,7 +135,7 @@ function collectUserData(perspective: InsightTab): string {
   // Goal 进度
   if (perspective === 'yearly') {
     const goals: { title: string; progress: number }[] = JSON.parse(
-      localStorage.getItem('life-os-goals') || '[]'
+      getItem('life-os-goals') || '[]'
     );
     if (goals.length) {
       lines.push(`【当前目标进度】\n${goals.map((g) => `${g.title}：${g.progress}%`).join('、')}`);
@@ -202,7 +203,7 @@ async function callGemini(apiKey: string, perspective: InsightTab, userData: str
 // ── Hook ──
 
 export function useAIInsight() {
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem(API_KEY_STORAGE) || '');
+  const [apiKey, setApiKey] = useState(() => getItem(API_KEY_STORAGE) || '');
   const [insightText, setInsightText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -210,7 +211,7 @@ export function useAIInsight() {
   const abortRef = useRef<AbortController | null>(null);
 
   const saveApiKey = useCallback((key: string) => {
-    localStorage.setItem(API_KEY_STORAGE, key);
+    setItem(API_KEY_STORAGE, key);
     setApiKey(key);
   }, []);
 

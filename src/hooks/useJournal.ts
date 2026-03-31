@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import type { JournalEntry } from '../types';
+import { getItem, setItem } from '../lib/storage';
 
 const STORAGE_KEY_ME = 'life-os-journal-me';
 const STORAGE_KEY_CHENCHEN = 'life-os-journal-chenchen';
@@ -7,7 +8,7 @@ const STORAGE_KEY_CHENCHEN = 'life-os-journal-chenchen';
 function loadEntries(owner: 'me' | 'chenchen'): JournalEntry[] {
   try {
     const key = owner === 'me' ? STORAGE_KEY_ME : STORAGE_KEY_CHENCHEN;
-    return JSON.parse(localStorage.getItem(key) || '[]');
+    return JSON.parse(getItem(key) || '[]');
   } catch {
     return [];
   }
@@ -15,7 +16,7 @@ function loadEntries(owner: 'me' | 'chenchen'): JournalEntry[] {
 
 function saveEntries(owner: 'me' | 'chenchen', entries: JournalEntry[]) {
   const key = owner === 'me' ? STORAGE_KEY_ME : STORAGE_KEY_CHENCHEN;
-  localStorage.setItem(key, JSON.stringify(entries));
+  setItem(key, JSON.stringify(entries));
 }
 
 export function useJournal() {

@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import type { Goal, AutoCalcRule } from '../types';
 import { HABIT_KEYS } from '../lib/constants';
 import { formatDate } from '../lib/utils';
+import { getItem } from '../lib/storage';
 
 const STORAGE_KEYS = {
   habits: 'life-os-habits',
@@ -12,10 +13,10 @@ const STORAGE_KEYS = {
   awareness: 'life-os-awareness-',
 } as const;
 
-// 从 localStorage 安全读取数据
+// 从存储层安全读取数据
 function loadJSON<T>(key: string, fallback: T): T {
   try {
-    return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback;
+    return JSON.parse(getItem(key) || 'null') ?? fallback;
   } catch {
     return fallback;
   }
@@ -110,7 +111,7 @@ function calculateByRule(rule: AutoCalcRule): { progress: number; reason: string
         const d = new Date();
         d.setDate(d.getDate() - i);
         const dateStr = formatDate(d);
-        if (localStorage.getItem(prefix + dateStr)) count++;
+        if (getItem(prefix + dateStr)) count++;
       }
       const rate = Math.round((count / rule.target) * 100);
       return {

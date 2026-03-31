@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { TravelPlan, TravelJournalEntry } from '../types';
+import { getItem, setItem } from '../lib/storage';
 
 const PLANS_KEY = 'doris_travel_plans';
 const JOURNALS_KEY = 'doris_travel_journals';
@@ -7,7 +8,7 @@ const JOURNALS_KEY = 'doris_travel_journals';
 export function useTravel() {
   const [plans, setPlans] = useState<TravelPlan[]>(() => {
     try {
-      const saved = localStorage.getItem(PLANS_KEY);
+      const saved = getItem(PLANS_KEY);
       const parsed = saved ? JSON.parse(saved) : [];
       // 兼容旧数据：把 upcoming/ongoing 统一归为 planning
       return parsed.map((p: TravelPlan) => {
@@ -21,7 +22,7 @@ export function useTravel() {
 
   const [journals, setJournals] = useState<TravelJournalEntry[]>(() => {
     try {
-      const saved = localStorage.getItem(JOURNALS_KEY);
+      const saved = getItem(JOURNALS_KEY);
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -29,11 +30,11 @@ export function useTravel() {
   });
 
   useEffect(() => {
-    localStorage.setItem(PLANS_KEY, JSON.stringify(plans));
+    setItem(PLANS_KEY, JSON.stringify(plans));
   }, [plans]);
 
   useEffect(() => {
-    localStorage.setItem(JOURNALS_KEY, JSON.stringify(journals));
+    setItem(JOURNALS_KEY, JSON.stringify(journals));
   }, [journals]);
 
   // ===== Plan CRUD =====

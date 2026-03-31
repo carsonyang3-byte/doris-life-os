@@ -6,6 +6,7 @@ import type { InsightTab } from '../hooks/useAIInsight';
 import { useGoalProgress } from '../hooks/useGoalProgress';
 import { VISION, HABIT_KEYS } from '../lib/constants';
 import { formatDate } from '../lib/utils';
+import { getItem, setItem } from '../lib/storage';
 
 export default function DashboardPage() {
   const { todayStr, dateCN } = useToday();
@@ -42,7 +43,7 @@ export default function DashboardPage() {
     } else {
       // 加载历史数据
       try {
-        const data = JSON.parse(localStorage.getItem('life-os-today-' + selectedDate) || 'null');
+        const data = JSON.parse(getItem('life-os-today-' + selectedDate) || 'null');
         if (data) {
           setSelectedTasks(data.tasks?.length >= 3 ? [...data.tasks] : [...(data.tasks || []), ...Array(3 - (data.tasks?.length || 0)).fill('')]);
           setSelectedHappy(data.happy || '');
@@ -62,8 +63,8 @@ export default function DashboardPage() {
 
   const saveSelected = () => {
     const data = { date: selectedDate, tasks: selectedTasks.filter(t => t.trim()), happy: selectedHappy, awareness: selectedAwareness };
-    localStorage.setItem('life-os-today-' + selectedDate, JSON.stringify(data));
-    if (selectedAwareness?.trim()) localStorage.setItem('life-os-awareness-' + selectedDate, '1');
+    setItem('life-os-today-' + selectedDate, JSON.stringify(data));
+    if (selectedAwareness?.trim()) setItem('life-os-awareness-' + selectedDate, '1');
   };
 
   // ---- Habit / Money 计算 ----

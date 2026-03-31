@@ -2,20 +2,21 @@ import { useState, useCallback } from 'react';
 import type { HabitData } from '../types';
 import { HABIT_KEYS } from '../lib/constants';
 import { formatDate } from '../lib/utils';
+import { getItem, setItem } from '../lib/storage';
 
 const STORAGE_KEY = 'life-os-habits';
 const AWARENESS_PREFIX = 'life-os-awareness-';
 
 function loadHabitData(): HabitData {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    return JSON.parse(getItem(STORAGE_KEY) || '{}');
   } catch {
     return {};
   }
 }
 
 function saveHabitData(data: HabitData) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  setItem(STORAGE_KEY, JSON.stringify(data));
 }
 
 function seededRandom(seed: number) {
@@ -87,7 +88,7 @@ export function useHabits() {
     for (let i = 0; i < 365; i++) {
       const d = new Date(new Date());
       d.setDate(d.getDate() - i);
-      if (localStorage.getItem(AWARENESS_PREFIX + formatDate(d))) count++;
+      if (getItem(AWARENESS_PREFIX + formatDate(d))) count++;
     }
     return count;
   }, []);

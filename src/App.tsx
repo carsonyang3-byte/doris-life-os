@@ -9,9 +9,20 @@ import JournalPage from './pages/JournalPage';
 import TravelPage from './pages/TravelPage';
 import type { PageType } from './types';
 import { formatDateCN } from './lib/utils';
+import { ensureStorageReady, migrateFromLocalStorage } from './lib/storage';
 
 function App() {
   const [activePage, setActivePage] = useState<PageType>('dashboard');
+  const [ready, setReady] = useState(false);
+
+  // 初始化 Supabase 存储 + 迁移 localStorage
+  useEffect(() => {
+    (async () => {
+      await ensureStorageReady();
+      await migrateFromLocalStorage();
+      setReady(true);
+    })();
+  }, []);
 
   // Set hero date
   useEffect(() => {
@@ -24,6 +35,14 @@ function App() {
       el.textContent = cn;
     }
   }, []);
+
+  if (!ready) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', fontFamily: 'system-ui', color: '#666' }}>
+        Loading...
+      </div>
+    );
+  }
 
   return (
     <Layout activePage={activePage} onPageChange={setActivePage}>

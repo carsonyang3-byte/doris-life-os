@@ -18,6 +18,7 @@
 import { useMemo } from 'react';
 import { HABIT_KEYS } from '../lib/constants';
 import { formatDate } from '../lib/utils';
+import { getItem } from '../lib/storage';
 
 // ---- 积分规则定义 ----
 
@@ -78,14 +79,14 @@ const TODAY_PREFIX = 'life-os-today-';
 
 function getHabitsForDate(dateStr: string): Record<string, boolean> | null {
   try {
-    const all = JSON.parse(localStorage.getItem(HABIT_STORAGE) || '{}');
+    const all = JSON.parse(getItem(HABIT_STORAGE) || '{}');
     return all[dateStr] || null;
   } catch { return null; }
 }
 
 function getTodayRecord(dateStr: string): { tasks: string[]; happy: string; awareness: string } | null {
   try {
-    return JSON.parse(localStorage.getItem(TODAY_PREFIX + dateStr) || 'null');
+    return JSON.parse(getItem(TODAY_PREFIX + dateStr) || 'null');
   } catch { return null; }
 }
 
