@@ -1,3 +1,62 @@
+const AUTH_KEY = '__auth_password__';
+const SESSION_KEY = '__auth_session__';
+
+/**
+ * 密码管理
+ * 密码存在 Supabase app_data 表中，key 为 AUTH_KEY
+ * 登录状态用 sessionStorage 保持（关闭浏览器需重新输入）
+ */
+
+/** 检查是否已设置密码（需要等 storage 初始化完成） */
+export function isPasswordSet(): boolean {
+  return !!cache[AUTH_KEY];
+}
+
+/** 验证密码是否正确 */
+export async function checkPassword(input: string): Promise<boolean> {
+  const stored = cache[AUTH_KEY];
+  if (!stored) return false;
+  try {
+    const data = JSON.parse(stored);
+    return data.password === input;
+  } catch {
+    return false;
+  }
+}
+
+/** 设置密码（首次使用时） */
+export async function setPassword(password: string): Promise<boolean> {
+  try {
+    const value = JSON.stringify({ password, createdAt: Date.now() });
+    cache[AUTH_KEY] = value;
+    const { error } = await supabase
+      .from('app_data')
+      .upsert({ key: AUTH_KEY, value: JSON.parse(value) }, { onConflict: 'key' });
+    if (error) {
+      console.warn('Failed to set password:', error);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.warn('Set password error:', e);
+    return false;
+  }
+}
+
+/** 设置/检查 sessionStorage 登录状态 */
+export function setSession(): void {
+  sessionStorage.setItem(SESSION_KEY, Date.now().toString());
+}
+
+export function hasSession(): boolean {
+  return !!sessionStorage.getItem(SESSION_KEY);
+}
+
+/** 清除登录状态 */
+export function clearSession(): void {
+  sessionStorage.removeItem(SESSION_KEY);
+}
+
 /**
  * 统一存储层 — localStorage ↔ Supabase
  *

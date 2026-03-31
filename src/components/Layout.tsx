@@ -85,7 +85,7 @@ export default function Layout({ activePage, onPageChange, children }: LayoutPro
       <footer className="border-t border-[var(--border)] mt-6">
         <div className="max-w-[1100px] mx-auto flex items-center justify-between px-6 py-3.5">
           <span className="text-[10px] text-[rgba(160,160,160,0.6)]">Doris' Life OS</span>
-          <span className="text-[10px] text-[rgba(160,160,160,0.6)]">Data stored locally</span>
+          <span className="text-[10px] text-[rgba(160,160,160,0.6)]">Data stored in cloud</span>
         </div>
       </footer>
     </div>
