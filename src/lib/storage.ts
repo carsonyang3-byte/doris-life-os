@@ -7,8 +7,12 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = 'https://REDACTED_PROJECT_REF.supabase.co';
-const SUPABASE_KEY = 'REDACTED_VITE_SUPABASE_ANON_KEY';
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
+
+if (!SUPABASE_URL || !SUPABASE_KEY) {
+  throw new Error('Missing VITE_SUPABASE_URL or VITE_SUPABASE_KEY. Check .env file.');
+}
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
