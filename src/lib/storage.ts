@@ -16,26 +16,30 @@ export function isPasswordSet(): boolean {
 export async function checkPassword(input: string): Promise<boolean> {
   const stored = cache[AUTH_KEY];
   if (!stored) return false;
+  // 存储的可能是纯字符串密码，也可能是旧版 JSON 格式
   try {
-    const data = JSON.parse(stored);
-    return data.password === input;
+    const parsed = JSON.parse(stored);
+    return parsed.password === input;
   } catch {
-    return false;
+    // 不是 JSON，直接当字符串比较
+    return stored === input;
   }
 }
 
 /** 设置密码（首次使用时） */
 export async function setPassword(password: string): Promise<boolean> {
   try {
-    const value = JSON.stringify({ password, createdAt: Date.now() });
-    cache[AUTH_KEY] = value;
+    // value 字段存纯字符串，避免 JSONB 解析问题
+    const dbValue = password;
     const { error } = await supabase
       .from('app_data')
-      .upsert({ key: AUTH_KEY, value: JSON.parse(value) }, { onConflict: 'key' });
+      .upsert({ key: AUTH_KEY, value: dbValue }, { onConflict: 'key' });
     if (error) {
       console.warn('Failed to set password:', error);
       return false;
     }
+    // Supabase 写入成功后再更新缓存
+    cache[AUTH_KEY] = password;
     return true;
   } catch (e) {
     console.warn('Set password error:', e);
@@ -86,7 +90,11 @@ async function init(): Promise<void> {
     const { data, error } = await supabase.from('app_data').select('key, value');
     if (!error && data) {
       for (const row of data) {
-        cache[row.key] = typeof row.value === 'string' ? row.value : JSON.stringify(row.value);
+        if (typeof row.value === 'string') {
+          cache[row.key] = row.value;
+        } else if (row.value !== null && row.value !== undefined) {
+          cache[row.key] = JSON.stringify(row.value);
+        }
       }
     }
     initialized = true;
