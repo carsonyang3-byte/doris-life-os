@@ -116,13 +116,13 @@ function AuthGate({ isSetup, onAuthenticated }: { isSetup: boolean; onAuthentica
         return;
       }
       setLoading(true);
-      const ok = await setPassword(password);
+      const result = await setPassword(password);
       setLoading(false);
-      if (ok) {
+      if (result.ok) {
         setSession();
         onAuthenticated();
       } else {
-        setError('设置密码失败，请重试');
+        setError(result.error || '设置密码失败，请重试');
       }
     } else {
       setLoading(true);
