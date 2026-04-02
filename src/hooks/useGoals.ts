@@ -70,6 +70,13 @@ export function useGoals() {
     setGoals([...updated]);
   }, []);
 
+  const deleteGoal = useCallback((title: string) => {
+    const updated = loadGoals();
+    const next = updated.filter((g) => g.title !== title);
+    saveGoals(next);
+    setGoals([...next]);
+  }, []);
+
   const addProject = useCallback((title: string) => {
     setProjects((prev) => {
       const next = [...prev, { title, desc: 'New project', status: 'planning' as const, color: '#9B8FD6' }];
@@ -113,5 +120,5 @@ export function useGoals() {
     });
   }, []);
 
-  return { goals, projects, updateProgress, addGoal, addProject, deleteProject, updateProjectTitle, updateProjectStatus };
+  return { goals, projects, updateProgress, addGoal, deleteGoal, addProject, deleteProject, updateProjectTitle, updateProjectStatus };
 }

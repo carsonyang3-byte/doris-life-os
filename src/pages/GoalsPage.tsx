@@ -5,7 +5,7 @@ import { DISTANCE_DIMS } from '../lib/constants';
 import type { Goal } from '../types';
 
 export default function GoalsPage() {
-  const { goals, projects, updateProgress, addGoal, addProject, deleteProject, updateProjectTitle, updateProjectStatus } = useGoals();
+  const { goals, projects, updateProgress, addGoal, deleteGoal, addProject, deleteProject, updateProjectTitle, updateProjectStatus } = useGoals();
   const { details } = useGoalProgress(goals);
 
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -187,7 +187,16 @@ export default function GoalsPage() {
                     <span className="text-[10px] text-[var(--text-muted)]">%</span>
                   </div>
                 ) : (
-                  <button onClick={() => handleEdit(originalIdx)} className="btn-sm flex-shrink-0">Edit</button>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    <button onClick={() => handleEdit(originalIdx)} className="btn-sm">Edit</button>
+                    <button
+                      onClick={() => deleteGoal(g.title)}
+                      className="w-6 h-6 rounded text-[11px] text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--danger)] transition-colors flex items-center justify-center"
+                      title="删除目标"
+                    >
+                      ×
+                    </button>
+                  </div>
                 )}
               </div>
             );
