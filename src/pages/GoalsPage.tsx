@@ -5,7 +5,7 @@ import { DISTANCE_DIMS } from '../lib/constants';
 import type { Goal } from '../types';
 
 export default function GoalsPage() {
-  const { goals, projects, updateProgress, addGoal, addProject } = useGoals();
+  const { goals, projects, updateProgress, addGoal, addProject, deleteProject, updateProjectTitle, updateProjectStatus } = useGoals();
   const { details } = useGoalProgress(goals);
 
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -13,6 +13,9 @@ export default function GoalsPage() {
   const [newGoalTitle, setNewGoalTitle] = useState('');
   const [newProjectTitle, setNewProjectTitle] = useState('');
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+  const [goalYear, setGoalYear] = useState(new Date().getFullYear());
+  const [editingProjectTitle, setEditingProjectTitle] = useState<string | null>(null);
+  const [editProjectValue, setEditProjectValue] = useState('');
 
   const handleEdit = (index: number) => {
     setEditingIndex(index);
@@ -49,16 +52,63 @@ export default function GoalsPage() {
     }
   };
 
+  const handleEditProject = (title: string) => {
+    setEditingProjectTitle(title);
+    setEditProjectValue(title);
+  };
+
+  const handleSaveProjectTitle = () => {
+    if (editingProjectTitle && editProjectValue.trim()) {
+      updateProjectTitle(editingProjectTitle, editProjectValue.trim());
+    }
+    setEditingProjectTitle(null);
+  };
+
+  const filteredGoals = useMemo(
+    () => goals.filter((g) => g.year === goalYear),
+    [goals, goalYear]
+  );
+
+  const availableYears = useMemo(() => {
+    const years = [...new Set(goals.map((g) => g.year))].sort((a, b) => b - a);
+    const current = new Date().getFullYear();
+    if (!years.includes(current)) years.unshift(current);
+    return years;
+  }, [goals]);
+
+  const toggleProjectStatus = (title: string, current: 'active' | 'planning' | 'completed') => {
+    const next = current === 'active' ? 'completed' : current === 'completed' ? 'planning' : 'active';
+    updateProjectStatus(title, next);
+  };
+
   return (
     <>
       {/* Goals */}
       <div className="card-base">
-        <SectionHeader dot="success" title="2026 Goals" />
+        <SectionHeader dot="success" title={`${goalYear} Goals`} extra={
+          <div className="flex gap-1">
+            {availableYears.map((y) => (
+              <button
+                key={y}
+                onClick={() => setGoalYear(y)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all ${
+                  y === goalYear
+                    ? 'bg-[var(--success)] text-white'
+                    : 'text-[var(--text-muted)] hover:bg-[var(--bg-hover)]'
+                }`}
+              >
+                {y}
+              </button>
+            ))}
+          </div>
+        } />
         <div className="flex flex-col gap-2.5">
-          {goals.map((g, i) => {
-            const detail = details[i];
+          {filteredGoals.map((g, idx) => {
+            const originalIdx = goals.indexOf(g);
+            const detail = details[originalIdx];
             const hasAutoCalc = !!g.autoCalc;
-            const showCalc = hasAutoCalc && expandedIndex === i;
+            const showCalc = hasAutoCalc && expandedIndex === idx;
+            const isEditing = editingIndex === originalIdx;
 
             return (
               <div
@@ -96,7 +146,7 @@ export default function GoalsPage() {
                   {hasAutoCalc && (
                     <div className="mt-1.5">
                       <button
-                        onClick={() => setExpandedIndex(expandedIndex === i ? null : i)}
+                        onClick={() => setExpandedIndex(expandedIndex === idx ? null : idx)}
                         className="text-[11px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
                       >
                         {showCalc ? '收起' : '查看计算依据'}
@@ -109,7 +159,7 @@ export default function GoalsPage() {
                           {detail.isManual && (
                             <div className="flex items-center gap-2 mt-2">
                               <button
-                                onClick={() => handleResetToAuto(i)}
+                                onClick={() => handleResetToAuto(originalIdx)}
                                 className="text-[10px] text-[var(--success)] hover:underline"
                               >
                                 恢复自动值 ({detail.autoProgress}%)
@@ -121,7 +171,7 @@ export default function GoalsPage() {
                     </div>
                   )}
                 </div>
-                {editingIndex === i ? (
+                {isEditing ? (
                   <div className="flex items-center gap-1.5 flex-shrink-0">
                     <input
                       type="number"
@@ -131,13 +181,13 @@ export default function GoalsPage() {
                       min={0}
                       max={100}
                       autoFocus
-                      onKeyDown={(e) => e.key === 'Enter' && handleSave(i)}
-                      onBlur={() => handleSave(i)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSave(originalIdx)}
+                      onBlur={() => handleSave(originalIdx)}
                     />
                     <span className="text-[10px] text-[var(--text-muted)]">%</span>
                   </div>
                 ) : (
-                  <button onClick={() => handleEdit(i)} className="btn-sm flex-shrink-0">Edit</button>
+                  <button onClick={() => handleEdit(originalIdx)} className="btn-sm flex-shrink-0">Edit</button>
                 )}
               </div>
             );
@@ -160,24 +210,70 @@ export default function GoalsPage() {
       <div className="card-base">
         <SectionHeader dot="info" title="Projects" />
         <div className="flex flex-col gap-2.5">
-          {projects.map((p) => (
-            <div key={p.title} className="flex items-center gap-3 p-3.5 rounded-xl bg-[var(--bg-subtle)] transition-colors duration-200 hover:bg-[var(--bg-hover)]">
-              <div className="w-1 h-9 rounded-sm flex-shrink-0" style={{ background: p.color }} />
-              <div className="flex-1 min-w-0">
-                <div className="text-[14px] font-medium">{p.title}</div>
-                <div className="text-[12px] text-[var(--text-muted)] mt-0.5">{p.desc}</div>
+          {projects.map((p) => {
+            const isEditingTitle = editingProjectTitle === p.title;
+            return (
+              <div key={p.title} className="p-3.5 rounded-xl bg-[var(--bg-subtle)] transition-colors duration-200 hover:bg-[var(--bg-hover)]">
+                <div className="flex items-start gap-3">
+                  <div className="w-1 h-9 rounded-sm flex-shrink-0 mt-0.5" style={{ background: p.color }} />
+                  <div className="flex-1 min-w-0">
+                    {isEditingTitle ? (
+                      <input
+                        type="text"
+                        className="today-input text-[14px] font-medium"
+                        value={editProjectValue}
+                        onChange={(e) => setEditProjectValue(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSaveProjectTitle()}
+                        onBlur={handleSaveProjectTitle}
+                        autoFocus
+                      />
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <span className="text-[14px] font-medium">{p.title}</span>
+                        <button onClick={() => handleEditProject(p.title)} className="text-[10px] text-[var(--text-muted)] hover:text-[var(--accent)]">Edit</button>
+                      </div>
+                    )}
+                    <div className="text-[12px] text-[var(--text-muted)] mt-0.5">{p.desc}</div>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    <button
+                      onClick={() => toggleProjectStatus(p.title, p.status)}
+                      className="text-[12px] font-medium px-2.5 py-1 rounded-md cursor-pointer transition-opacity hover:opacity-80"
+                      style={{
+                        color: p.status === 'active' ? 'var(--success)' : p.status === 'completed' ? 'var(--info)' : 'var(--warning)',
+                        background: p.status === 'active' ? 'rgba(91,173,111,0.08)' : p.status === 'completed' ? 'rgba(91,139,213,0.08)' : 'rgba(232,150,63,0.08)',
+                      }}
+                    >
+                      {p.status === 'active' ? '进行中' : p.status === 'completed' ? '已完成' : '规划中'}
+                    </button>
+                    <button
+                      onClick={() => deleteProject(p.title)}
+                      className="w-6 h-6 rounded text-[11px] text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--danger)] transition-colors flex items-center justify-center"
+                      title="删除项目"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+                {/* 状态历史 */}
+                {p.history && p.history.length > 0 && (
+                  <div className="mt-2 ml-4 flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] text-[var(--text-muted)]">变更记录：</span>
+                    {p.history.slice(0, 5).map((h, hi) => (
+                      <span key={hi} className="text-[10px] px-1.5 py-0.5 rounded"
+                        style={{
+                          color: h.status === 'active' ? 'var(--success)' : h.status === 'completed' ? 'var(--info)' : 'var(--warning)',
+                          background: h.status === 'active' ? 'rgba(91,173,111,0.08)' : h.status === 'completed' ? 'rgba(91,139,213,0.08)' : 'rgba(232,150,63,0.08)',
+                        }}
+                      >
+                        {h.date} → {h.status === 'active' ? '进行中' : h.status === 'completed' ? '已完成' : '规划中'}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
-              <span
-                className="text-[12px] font-medium px-2.5 py-1 rounded-md flex-shrink-0"
-                style={{
-                  color: p.status === 'active' ? 'var(--success)' : 'var(--warning)',
-                  background: p.status === 'active' ? 'rgba(91,173,111,0.08)' : 'rgba(232,150,63,0.08)',
-                }}
-              >
-                {p.status === 'active' ? 'In Progress' : 'Planning'}
-              </span>
-            </div>
-          ))}
+            );
+          })}
         </div>
         <div className="flex items-center gap-2 mt-4">
           <input

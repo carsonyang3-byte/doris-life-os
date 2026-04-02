@@ -91,13 +91,13 @@ export const WEEKLY_QUESTIONS = [
 ] as const;
 
 export const DEFAULT_GOALS = [
-  { title: '冥想习惯养成', desc: '每天冥想10分钟，连续30天', progress: 0, color: '#5BAD6F', dimension: 'energy',
+  { title: '冥想习惯养成', desc: '每天冥想10分钟，连续30天', progress: 0, color: '#5BAD6F', dimension: 'energy', year: new Date().getFullYear(),
     autoCalc: { type: 'habit_rate' as const, habit: '冥想', windowDays: 30 } },
-  { title: '读完12本书', desc: '每月1本，涵盖心理学/健康/AI', progress: 0, color: '#5B9BD5', dimension: 'growth',
+  { title: '读完12本书', desc: '每月1本，涵盖心理学/健康/AI', progress: 0, color: '#5B9BD5', dimension: 'growth', year: new Date().getFullYear(),
     autoCalc: { type: 'library_count' as const, itemType: 'book' as const, statusFilter: 'completed', target: 12 } },
-  { title: '副业收入5000/月', desc: 'AI相关项目或内容创作', progress: 0, color: '#C9A96E', dimension: 'workMoney',
+  { title: '副业收入5000/月', desc: 'AI相关项目或内容创作', progress: 0, color: '#C9A96E', dimension: 'workMoney', year: new Date().getFullYear(),
     autoCalc: { type: 'money_monthly' as const, category: 'freelance', direction: 'income' as const, target: 5000 } },
-  { title: '体重管理', desc: '达到目标BMI范围并维持', progress: 0, color: '#E8963F', dimension: 'energy' },
+  { title: '体重管理', desc: '达到目标BMI范围并维持', progress: 0, color: '#E8963F', dimension: 'energy', year: new Date().getFullYear() },
 ] as const;
 
 export const DEFAULT_PROJECTS = [

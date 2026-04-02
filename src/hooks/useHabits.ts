@@ -29,7 +29,9 @@ function seededRandom(seed: number) {
 
 function seedHabitData() {
   const existing = loadHabitData();
-  if (Object.keys(existing).length > 0) return;
+  // 有数据就跳过，避免重复 seed 堆积
+  const hasRealData = Object.values(existing).some((h) => Object.keys(h).length > 0);
+  if (hasRealData) return;
   const data: HabitData = {};
   const rand = seededRandom(42);
   const today = new Date();
@@ -95,7 +97,10 @@ export function useHabits() {
 
   const getExerciseCount = useCallback(() => {
     const all = loadHabitData();
-    return Object.values(all).filter((h) => h['运动']).length;
+    const year = new Date().getFullYear();
+    return Object.entries(all)
+      .filter(([dateStr]) => dateStr.startsWith(String(year)))
+      .filter(([, h]) => h['运动']).length;
   }, []);
 
   const getHeatmapData = useCallback(() => {

@@ -80,6 +80,28 @@ export default function JournalPage() {
   };
   const config = ownerConfig[activeOwner];
 
+  const handleExport = () => {
+    if (filteredEntries.length === 0) return;
+    const lines: string[] = [
+      `# ${config.labelCN}`,
+      `导出时间：${new Date().toLocaleString('zh-CN')}`,
+      `共 ${filteredEntries.length} 篇\n`,
+    ];
+    filteredEntries.forEach((e) => {
+      lines.push(`## ${e.date}${e.title ? ` - ${e.title}` : ''}${e.mood ? ` ${e.mood}` : ''}`);
+      lines.push(e.content);
+      if (e.tags && e.tags.length > 0) lines.push(`标签：${e.tags.map((t) => `#${t}`).join(' ')}`);
+      lines.push('');
+    });
+    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `journal_${activeOwner}_${new Date().toISOString().slice(0, 10)}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <>
       {/* Header */}
@@ -160,6 +182,7 @@ export default function JournalPage() {
             value={searchKeyword}
             onChange={(e) => setSearchKeyword(e.target.value)}
           />
+          <button onClick={handleExport} className="btn-sm">导出</button>
           <button onClick={() => { setShowForm(true); setExpandedId(null); }} className="btn-save">
             + 写日记
           </button>

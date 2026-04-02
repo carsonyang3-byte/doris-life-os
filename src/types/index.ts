@@ -30,6 +30,7 @@ export interface Goal {
   progress: number;          // 手动覆盖值，-1 表示使用自动计算
   color: string;
   dimension: string;
+  year: number;             // 所属年份
   autoCalc?: AutoCalcRule;   // 自动计算规则
   manualOverride?: boolean;  // 是否手动覆盖了自动值
 }
@@ -47,6 +48,7 @@ export interface Project {
   desc: string;
   status: 'active' | 'planning' | 'completed';
   color: string;
+  history?: { date: string; status: 'active' | 'planning' | 'completed' }[]; // 状态变更历史
 }
 
 export interface VisionDimension {

@@ -12,12 +12,14 @@ export function formatDateCN(dateStr: string): string {
 }
 
 export function getWeekRange(d: Date): { start: Date; end: Date } {
-  const dow = getDay(d) || 7;
-  const start = new Date(d);
-  start.setDate(d.getDate() - dow + 1);
-  const end = new Date(start);
-  end.setDate(start.getDate() + 6);
-  return { start, end };
+  // 用 UTC 避免时区偏移导致月末 setDate 溢出（如 3月31日-6天变成4月）
+  const utc = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dow = utc.getUTCDay() || 7; // 周一=1 ... 周日=7
+  const startUTC = new Date(utc);
+  startUTC.setUTCDate(utc.getUTCDate() - dow + 1);
+  const endUTC = new Date(startUTC);
+  endUTC.setUTCDate(startUTC.getUTCDate() + 6);
+  return { start: startUTC, end: endUTC };
 }
 
 export function getWeekKey(d: Date): string {

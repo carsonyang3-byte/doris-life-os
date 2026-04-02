@@ -5,7 +5,7 @@ import { useAIInsight } from '../hooks/useAIInsight';
 import type { InsightTab } from '../hooks/useAIInsight';
 import { useGoalProgress } from '../hooks/useGoalProgress';
 import { VISION, HABIT_KEYS } from '../lib/constants';
-import { formatDate } from '../lib/utils';
+import { formatDate, getWeekRange } from '../lib/utils';
 import { getItem, setItem } from '../lib/storage';
 
 export default function DashboardPage() {
@@ -32,7 +32,7 @@ export default function DashboardPage() {
   const selectedDateCN = useMemo(() => {
     const d = new Date(selectedDate + 'T00:00:00');
     const weeks = ['日', '一', '二', '三', '四', '五', '六'];
-    return `${d.getMonth() + 1}月${d.getDate()}日 周${weeks[d.getDay()]}`;
+    return `${d.getUTCMonth() + 1}月${d.getUTCDate()}日 周${weeks[d.getUTCDay()]}`;
   }, [selectedDate]);
 
   useEffect(() => {
@@ -81,9 +81,7 @@ export default function DashboardPage() {
   const lastWeek = weeklyMoney[weeklyMoney.length - 1];
   const prevWeek = weeklyMoney.length > 1 ? weeklyMoney[weeklyMoney.length - 2] : lastWeek;
 
-  const dow = new Date().getDay() || 7;
-  const ws = new Date();
-  ws.setDate(new Date().getDate() - dow + 1);
+  const { start: weekStart, end: weekEnd } = useMemo(() => getWeekRange(new Date()), []);
 
   const trendPct = prevWeek && prevWeek.expense > 0 && lastWeek
     ? Math.round(((lastWeek.expense - prevWeek.expense) / prevWeek.expense) * 100)
@@ -163,7 +161,7 @@ export default function DashboardPage() {
       <div className="card-base">
         <SectionHeader dot="success" title="This Week" extra={
           <span className="text-[12px] text-[var(--text-muted)]">
-            {ws.getMonth() + 1}/{ws.getDate()} - {ws.getMonth() + 1}/{ws.getDate() + 6}
+            {weekStart.getMonth() + 1}/{weekStart.getDate()} - {weekEnd.getMonth() + 1}/{weekEnd.getDate()}
           </span>
         } />
         <div className="grid grid-cols-5 gap-2.5 max-md:grid-cols-3">
@@ -193,15 +191,18 @@ export default function DashboardPage() {
             <div className="flex items-center gap-1.5 bg-[var(--bg-subtle)] rounded-lg px-2 py-1">
               <button onClick={() => {
                 const d = new Date(selectedDate + 'T00:00:00');
-                d.setDate(d.getDate() - 1);
-                setSelectedDate(formatDate(d));
+                const next = new Date(d);
+                next.setUTCDate(d.getUTCDate() - 1);
+                setSelectedDate(formatDate(next));
               }} className="p-0.5 hover:text-[var(--accent)] transition-colors">
                 <ChevronLeft className="w-3.5 h-3.5" />
               </button>
               <div className="flex items-center gap-1.5 cursor-pointer" onClick={() => {
                 const d = new Date(selectedDate + 'T00:00:00');
-                d.setDate(d.getDate() + 1);
-                if (formatDate(d) <= todayStr) setSelectedDate(formatDate(d));
+                const next = new Date(d);
+                next.setUTCDate(d.getUTCDate() + 1);
+                const nextStr = formatDate(next);
+                if (nextStr <= todayStr) setSelectedDate(nextStr);
               }}>
                 <CalendarDays className="w-3 h-3 text-[var(--text-muted)]" />
                 <span className="text-[12px] text-[var(--text-secondary)] font-medium whitespace-nowrap">

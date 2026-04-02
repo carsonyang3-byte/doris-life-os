@@ -19,7 +19,8 @@ function saveRecords(records: MoneyRecord[]) {
 }
 
 function seedMoneyData() {
-  if (getItem(STORAGE_KEY)) return;
+  const existing = loadRecords();
+  if (existing.length > 0) return;
   const records: MoneyRecord[] = [];
   const rand = (() => {
     let s = 777;
