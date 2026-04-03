@@ -4,7 +4,7 @@ import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '../lib/constants';
 
 export default function MoneyPage() {
   const { todayStr } = useToday();
-  const { records, addRecord, getWeeklyData } = useMoney();
+  const { records, addRecord, clearRecords, deleteRecord, removeDemoData, getWeeklyData } = useMoney();
   const [moneyType, setMoneyType] = useState<'expense' | 'income'>('expense');
   const [category, setCategory] = useState('');
   const [amount, setAmount] = useState('');
@@ -89,7 +89,7 @@ export default function MoneyPage() {
         dot="accent"
         title="Money Overview"
         extra={
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 flex-wrap">
             <button
               onClick={() => {
                 const [y, m] = selectedMonth.split('-').map(Number);
@@ -115,6 +115,26 @@ export default function MoneyPage() {
               className="px-2 py-1 rounded-md text-[12px] hover:bg-[var(--bg-hover)] text-[var(--text-muted)] transition-colors"
             >
               ›
+            </button>
+            <button
+              onClick={() => {
+                const ok = window.confirm('确定要清除所有演示数据吗？这会删除看起来像自动生成的旧记录，保留您最近添加的记录。');
+                if (ok) removeDemoData();
+              }}
+              className="ml-1 px-2 py-1 rounded-md text-[12px] hover:bg-[var(--bg-hover)] text-[var(--warning)] transition-colors"
+              title="清除演示数据"
+            >
+              清除假数据
+            </button>
+            <button
+              onClick={() => {
+                const ok = window.confirm('确定要清空所有 Money 记录吗？此操作不可恢复。');
+                if (ok) clearRecords();
+              }}
+              className="ml-1 px-2 py-1 rounded-md text-[12px] hover:bg-[var(--bg-hover)] text-[var(--danger)] transition-colors"
+              title="清空所有记录"
+            >
+              清空
             </button>
           </div>
         }
@@ -242,17 +262,30 @@ export default function MoneyPage() {
             <div className="text-center py-5 text-[12px] text-[var(--text-muted)]">本月暂无记录</div>
           ) : (
             monthRecords.map((r) => (
-              <div key={r.id} className="flex items-center gap-2.5 p-2 px-2.5 rounded-lg bg-[var(--bg-subtle)] text-[12px]">
+              <div key={r.id} className="flex items-center gap-2.5 p-2 px-2.5 rounded-lg bg-[var(--bg-subtle)] text-[12px] hover:bg-[var(--bg-hover)] transition-colors group">
                 <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: r.categoryColor }} />
                 <div className="flex-1 min-w-0">
                   <div className="text-[var(--text-secondary)] font-medium">{r.categoryLabel}</div>
                   {r.note && <div className="text-[11px] text-[var(--text-muted)]">{r.note}</div>}
                 </div>
-                <div className="text-right shrink-0">
-                  <div className="font-semibold text-[13px]" style={{ color: r.type === 'income' ? 'var(--success)' : 'var(--danger)' }}>
-                    {r.type === 'income' ? '+' : '-'}¥{r.amount.toLocaleString()}
+                <div className="text-right shrink-0 flex items-center gap-2">
+                  <div>
+                    <div className="font-semibold text-[13px]" style={{ color: r.type === 'income' ? 'var(--success)' : 'var(--danger)' }}>
+                      {r.type === 'income' ? '+' : '-'}¥{r.amount.toLocaleString()}
+                    </div>
+                    <div className="text-[10px] text-[var(--text-muted)]">{r.date}</div>
                   </div>
-                  <div className="text-[10px] text-[var(--text-muted)]">{r.date}</div>
+                  <button
+                    onClick={() => {
+                      if (window.confirm('确定要删除这条记录吗？')) {
+                        deleteRecord(r.id);
+                      }
+                    }}
+                    className="text-[10px] text-[var(--text-muted)] hover:text-[var(--danger)] opacity-0 group-hover:opacity-100 transition-opacity px-1.5 py-0.5 hover:bg-[var(--danger-light)] rounded"
+                    title="删除记录"
+                  >
+                    删除
+                  </button>
                 </div>
               </div>
             ))

@@ -19,8 +19,14 @@ function saveRecords(records: MoneyRecord[]) {
 }
 
 function seedMoneyData() {
+  // 旧版为了演示会在“空数据”时自动生成样例记录，这会导致看起来像是“自动加了数据且没有清理”。
+  // 改为：不再自动 seed；初始保持空数组。
   const existing = loadRecords();
   if (existing.length > 0) return;
+  saveRecords([]);
+  return;
+
+  // --- legacy demo seed (disabled) ---
   const records: MoneyRecord[] = [];
   const rand = (() => {
     let s = 777;
@@ -96,6 +102,41 @@ export function useMoney() {
     setRecords(updated);
   }, []);
 
+  const clearRecords = useCallback(() => {
+    saveRecords([]);
+    setRecords([]);
+  }, []);
+
+  const deleteRecord = useCallback((id: number) => {
+    const updated = loadRecords().filter(r => r.id !== id);
+    saveRecords(updated);
+    setRecords(updated);
+  }, []);
+
+  const removeDemoData = useCallback(() => {
+    // 移除所有看起来像演示数据的记录
+    const allRecords = loadRecords();
+    const now = Date.now();
+    const oneWeekAgo = now - 7 * 24 * 60 * 60 * 1000;
+    
+    // 演示数据通常有特定的模式：id较小，且记录数量多
+    // 保留用户手动添加的记录（id较大）和最近一周的记录
+    const realRecords = allRecords.filter(record => {
+      // 如果记录是最近一周内添加的，保留
+      if (record.id > oneWeekAgo) return true;
+      
+      // 如果记录日期是最近一周的，保留
+      const recordDate = new Date(record.date).getTime();
+      if (recordDate > oneWeekAgo) return true;
+      
+      // 否则很可能是旧的演示数据
+      return false;
+    });
+    
+    saveRecords(realRecords);
+    setRecords(realRecords);
+  }, []);
+
   const getWeeklyData = useCallback(() => {
     const all = loadRecords();
     const today = new Date();
@@ -121,5 +162,5 @@ export function useMoney() {
     return weeks;
   }, []);
 
-  return { records, addRecord, getWeeklyData };
+  return { records, addRecord, clearRecords, deleteRecord, removeDemoData, getWeeklyData };
 }

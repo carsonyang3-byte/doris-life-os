@@ -8,7 +8,11 @@ import { VISION, HABIT_KEYS } from '../lib/constants';
 import { formatDate, getWeekRange } from '../lib/utils';
 import { getItem, setItem } from '../lib/storage';
 
-export default function DashboardPage() {
+interface DashboardPageProps {
+  onPageChange?: (page: string) => void;
+}
+
+export default function DashboardPage({ onPageChange }: DashboardPageProps) {
   const { todayStr, dateCN } = useToday();
   const { tasks, setTasks, happy, setHappy, awareness, setAwareness, save, saved } = useTodayData();
   const { items: libraryItems } = useLibrary();
@@ -32,7 +36,7 @@ export default function DashboardPage() {
   const selectedDateCN = useMemo(() => {
     const d = new Date(selectedDate + 'T00:00:00');
     const weeks = ['日', '一', '二', '三', '四', '五', '六'];
-    return `${d.getUTCMonth() + 1}月${d.getUTCDate()}日 周${weeks[d.getUTCDay()]}`;
+    return `${d.getMonth() + 1}月${d.getDate()}日 周${weeks[d.getDay()]}`;
   }, [selectedDate]);
 
   useEffect(() => {
@@ -346,7 +350,14 @@ export default function DashboardPage() {
 
       {/* Row 5: Money Mini */}
       <div className="card-base">
-        <SectionHeader dot="accent" title="Money" extra={<span className="text-[11px] text-[var(--text-muted)] bg-[var(--bg-subtle)] px-2.5 py-1 rounded-md cursor-pointer hover:text-[var(--accent)] transition-colors font-medium">Details →</span>} />
+        <SectionHeader dot="accent" title="Money" extra={
+          <button
+            onClick={() => onPageChange && onPageChange('money')}
+            className="text-[11px] text-[var(--text-muted)] bg-[var(--bg-subtle)] px-2.5 py-1 rounded-md cursor-pointer hover:text-[var(--accent)] transition-colors font-medium hover:bg-[var(--bg-hover)]"
+          >
+            Details →
+          </button>
+        } />
         <div className="grid grid-cols-3 gap-3 mb-4 max-md:grid-cols-1">
           <div className="rounded-xl p-3.5 text-center" style={{ background: 'rgba(91,173,111,0.06)' }}>
             <div className="text-lg font-semibold text-[var(--success)]">+¥{monthIncome.toLocaleString('zh-CN', { maximumFractionDigits: 0 })}</div>
@@ -372,14 +383,28 @@ export default function DashboardPage() {
 
       {/* Row 6: Reflect Mini */}
       <div className="card-base">
-        <SectionHeader dot="purple" title="Reflect" extra={<span className="text-[11px] text-[var(--text-muted)] bg-[var(--bg-subtle)] px-2.5 py-1 rounded-md cursor-pointer hover:text-[var(--accent)] transition-colors font-medium">All Questions →</span>} />
+        <SectionHeader dot="purple" title="Reflect" extra={
+          <button
+            onClick={() => onPageChange && onPageChange('reflect')}
+            className="text-[11px] text-[var(--text-muted)] bg-[var(--bg-subtle)] px-2.5 py-1 rounded-md cursor-pointer hover:text-[var(--accent)] transition-colors font-medium hover:bg-[var(--bg-hover)]"
+          >
+            All Questions →
+          </button>
+        } />
         <ReflectMini question={useToday().todayQ} />
       </div>
 
       {/* Row 7: Goals + Vision Distance (积分驱动) */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         <div className="card-base">
-          <SectionHeader dot="success" title="Goals" extra={<span className="text-[11px] text-[var(--text-muted)] bg-[var(--bg-subtle)] px-2.5 py-1 rounded-md cursor-pointer hover:text-[var(--accent)] transition-colors font-medium">All Goals →</span>} />
+          <SectionHeader dot="success" title="Goals" extra={
+            <button
+              onClick={() => onPageChange && onPageChange('goals')}
+              className="text-[11px] text-[var(--text-muted)] bg-[var(--bg-subtle)] px-2.5 py-1 rounded-md cursor-pointer hover:text-[var(--accent)] transition-colors font-medium hover:bg-[var(--bg-hover)]"
+            >
+              All Goals →
+            </button>
+          } />
           <div className="flex flex-col gap-2.5">
             {goals.slice(0, 3).map((g, i) => (
               <GoalItem key={g.title} goal={g} progress={goalDetails[i]?.progress ?? g.progress} isAuto={!!g.autoCalc && !goalDetails[i]?.isManual} />

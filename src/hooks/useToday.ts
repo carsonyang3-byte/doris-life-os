@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import type { TodayRecord, Quote, LibraryItem } from '../types';
 import { QUOTES, DAILY_QUESTIONS } from '../lib/constants';
-import { formatDate, getGreeting } from '../lib/utils';
+import { formatDate, getGreeting, formatDateCN } from '../lib/utils';
 import { getItem, setItem } from '../lib/storage';
 
 const TODAY_PREFIX = 'life-os-today-';
@@ -22,12 +22,6 @@ export function useToday() {
   ) % QUOTES.length;
 
   return { date, todayStr, greeting, dateCN, todayQ, quoteIndex };
-}
-
-function formatDateCN(dateStr: string): string {
-  const d = new Date(dateStr + 'T00:00:00');
-  const weeks = ['日', '一', '二', '三', '四', '五', '六'];
-  return `${d.getMonth() + 1}月${d.getDate()}日 周${weeks[d.getDay()]}`;
 }
 
 export function useTodayData() {
