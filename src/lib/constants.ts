@@ -40,14 +40,14 @@ export const DIMENSIONS = [
   { key: 'growth', label: 'Growth', icon: '↑', color: '#9B8FD6' },
 ] as const;
 
-// Vision Distance 默认值 - 用于 Reset
+// Vision Distance 默认值 - 初始为空，用于 Reset
 export const DISTANCE_DIMS_DEFAULT = [
-  { label: '身体健康', color: '#5BAD6F', current: 65 },
-  { label: '内在稳定', color: '#5B9BD5', current: 55 },
-  { label: '家庭关系', color: '#E8963F', current: 78 },
-  { label: '财务自由', color: '#C9A96E', current: 30 },
-  { label: '个人成长', color: '#9B8FD6', current: 50 },
-  { label: '生活品质', color: '#D9534F', current: 60 },
+  { label: '身体健康', color: '#5BAD6F', current: 0 },
+  { label: '内在稳定', color: '#5B9BD5', current: 0 },
+  { label: '家庭关系', color: '#E8963F', current: 0 },
+  { label: '财务自由', color: '#C9A96E', current: 0 },
+  { label: '个人成长', color: '#9B8FD6', current: 0 },
+  { label: '生活品质', color: '#D9534F', current: 0 },
 ] as const;
 
 export const QUOTES = [

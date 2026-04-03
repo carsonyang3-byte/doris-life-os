@@ -185,7 +185,7 @@ export default function GoalsPage() {
                   </div>
                   {/* 自动计算说明 */}
                   {hasAutoCalc && (
-                    <div className="mt-1.5">
+                    <div className="mt1.5">
                       <button
                         onClick={() => setExpandedIndex(expandedIndex === idx ? null : idx)}
                         className="text-[11px] text-[var(--text-muted)] hover:text-[var(--text-secondary)] transition-colors"
@@ -241,7 +241,7 @@ export default function GoalsPage() {
                 )}
               </div>
             );
-          }))}
+          })}
         </div>
         <div className="flex items-center gap-2 mt-4">
           <input
@@ -381,9 +381,16 @@ function VisionDistance({ data, onUpdate, onReset }: {
     setEditingIndex(null);
   };
 
+  // 检查是否有设置过数据
+  const hasData = data.some(dim => dim.current > 0);
+  const allZero = data.every(dim => dim.current === 0);
+
   return (
     <>
-      <div className="flex justify-end mb-2">
+      <div className="flex justify-between items-center mb-3">
+        <div className="text-[11px] text-[var(--text-muted)]">
+          {allZero ? '点击数值设置你的 Vision Distance' : '点击数值编辑，Reset 清空'}
+        </div>
         <button
           onClick={onReset}
           className="text-[10px] text-[var(--text-muted)] hover:text-[var(--warning)] transition-colors"
@@ -391,6 +398,7 @@ function VisionDistance({ data, onUpdate, onReset }: {
           Reset
         </button>
       </div>
+      
       {data.map((dim, idx) => (
         <div key={dim.label} className="mb-4 last:mb-0">
           <div className="flex items-center justify-between mb-2">
@@ -414,21 +422,46 @@ function VisionDistance({ data, onUpdate, onReset }: {
               <button
                 onClick={() => handleEdit(idx, dim.current)}
                 className="text-[11px] font-semibold hover:opacity-70 transition-opacity cursor-pointer"
-                style={{ color: dim.color }}
+                style={{ color: dim.current === 0 ? 'var(--text-muted)' : dim.color }}
+                title={dim.current === 0 ? '点击设置' : '点击编辑'}
               >
-                {dim.current}%
+                {dim.current === 0 ? '未设置' : `${dim.current}%`}
               </button>
             )}
           </div>
-          <div className="h-2 bg-[var(--bg-subtle)] rounded overflow-hidden">
-            <div className="h-full rounded transition-all duration-1000" style={{ width: `${dim.current}%`, background: dim.color }} />
+          <div className="h-2 bg-[var(--bg-subtle)] rounded overflow-hidden relative">
+            <div 
+              className="h-full rounded transition-all duration-1000" 
+              style={{ 
+                width: `${dim.current}%`, 
+                background: dim.current === 0 ? 'var(--border)' : dim.color,
+                opacity: dim.current === 0 ? 0.3 : 1
+              }} 
+            />
+            {dim.current === 0 && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="text-[8px] text-[var(--text-muted)]">点击设置</span>
+              </div>
+            )}
           </div>
           <div className="flex justify-between mt-1.5">
             <span className="text-[9px] text-[var(--text-muted)]">Now</span>
-            <span className="text-[9px] text-[var(--text-muted)]">Vision</span>
+            <span className="text-[9px] text-[var(--text-muted)]">Vision (100%)</span>
           </div>
         </div>
       ))}
+      
+      {!hasData && (
+        <div className="mt-4 p-3 rounded-md bg-[var(--bg-subtle)] border border-dashed border-[var(--border)]">
+          <p className="text-[11px] text-[var(--text-muted)] mb-2">
+            💡 <strong>Vision Distance 是什么？</strong>
+          </p>
+          <p className="text-[10px] text-[var(--text-muted)]">
+            这是你离理想生活的距离。每个维度从 0% 开始，随着你的进步自动增长。
+            未来将根据你的打卡记录、习惯数据自动计算。
+          </p>
+        </div>
+      )}
     </>
   );
 }
