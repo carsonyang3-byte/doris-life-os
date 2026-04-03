@@ -5,7 +5,6 @@ import { getItem, setItem, removeItem } from '../lib/storage';
 
 const GOALS_KEY = 'life-os-goals';
 const PROJECTS_KEY = 'life-os-projects';
-const VISION_KEY = 'life-os-vision-distance';
 const now = new Date();
 const CURRENT_YEAR = now.getFullYear();
 
@@ -50,28 +49,9 @@ function saveProjects(projects: Project[]) {
   setItem(PROJECTS_KEY, JSON.stringify(projects));
 }
 
-function loadVisionDistance() {
-  try {
-    const saved = getItem(VISION_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      if (Array.isArray(parsed) && parsed.length === DISTANCE_DIMS_DEFAULT.length) {
-        return parsed;
-      }
-    }
-  } catch {}
-  // 返回默认值
-  return [...DISTANCE_DIMS_DEFAULT];
-}
-
-function saveVisionDistance(data: typeof DISTANCE_DIMS_DEFAULT) {
-  setItem(VISION_KEY, JSON.stringify(data));
-}
-
 export function useGoals() {
   const [goals, setGoals] = useState<Goal[]>(loadGoals);
   const [projects, setProjects] = useState<Project[]>(loadProjects);
-  const [visionDistance, setVisionDistance] = useState(loadVisionDistance);
 
   const updateProgress = useCallback((index: number, progress: number, manualOverride: boolean = true) => {
     const updated = loadGoals();
@@ -148,20 +128,5 @@ export function useGoals() {
     });
   }, []);
 
-  const updateVisionDistance = useCallback((index: number, value: number) => {
-    setVisionDistance(prev => {
-      const updated = [...prev];
-      updated[index] = { ...updated[index], current: Math.max(0, Math.min(100, value)) };
-      saveVisionDistance(updated);
-      return updated;
-    });
-  }, []);
-
-  const resetVisionDistance = useCallback(() => {
-    const defaultData = [...DISTANCE_DIMS_DEFAULT];
-    saveVisionDistance(defaultData);
-    setVisionDistance(defaultData);
-  }, []);
-
-  return { goals, projects, visionDistance, updateProgress, addGoal, deleteGoal, addProject, deleteProject, updateProjectTitle, updateProjectStatus, updateVisionDistance, resetVisionDistance };
+  return { goals, projects, updateProgress, addGoal, deleteGoal, addProject, deleteProject, updateProjectTitle, updateProjectStatus };
 }

@@ -23,6 +23,9 @@ export default function DashboardPage({ onPageChange }: DashboardPageProps) {
   const { goals } = useGoals();
   const { details: goalDetails } = useGoalProgress(goals);
   const { dimensions: scoreDims, todayScore } = useScoring();
+  
+  // 使用新的规则引擎获取 Vision Distance 数据
+  const { visionDistance, calculateVisionDistance, isCalculating } = useVisionEngine();
 
   // ---- Today 日期选择器 ----
   const [selectedDate, setSelectedDate] = useState(todayStr);
@@ -413,8 +416,23 @@ export default function DashboardPage({ onPageChange }: DashboardPageProps) {
         </div>
         <div className="distance-card">
           <SectionHeader dot="accent" title="Vision Distance" />
-          <p className="text-[12px] text-[var(--text-muted)] mb-1">近30天积分自动计算</p>
-          <VisionDistance dimensions={scoreDims} />
+          <p className="text-[12px] text-[var(--text-muted)] mb-1">
+            {isCalculating ? '计算中...' : '实时显示 Goals 页面设置值'}
+            <button 
+              onClick={calculateVisionDistance}
+              className="ml-2 text-[10px] text-[var(--accent)] hover:underline"
+              disabled={isCalculating}
+            >
+              重新计算
+            </button>
+          </p>
+          <VisionDistance dimensions={visionDistance.map((dim, index) => ({
+            key: dim.label,
+            label: dim.label,
+            color: dim.color,
+            percent: dim.current,
+            score: Math.round(dim.current * 3.3), // 转换为积分（假设100% = 330分）
+          }))} />
         </div>
       </div>
 

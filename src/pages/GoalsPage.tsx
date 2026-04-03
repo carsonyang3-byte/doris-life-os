@@ -1,18 +1,29 @@
 import { useState, useMemo } from 'react';
-import { useGoals } from '../hooks';
+import { useGoals, useVisionEngine } from '../hooks';
 import { useGoalProgress } from '../hooks/useGoalProgress';
 import type { Goal } from '../types';
 
 export default function GoalsPage() {
-  const { goals, projects, visionDistance, updateProgress, addGoal, deleteGoal, addProject, deleteProject, updateProjectTitle, updateProjectStatus, updateVisionDistance, resetVisionDistance } = useGoals();
+  const { goals, projects, updateProgress, addGoal, deleteGoal, addProject, deleteProject, updateProjectTitle, updateProjectStatus } = useGoals();
   const { details } = useGoalProgress(goals);
+  
+  // 使用新的规则引擎
+  const { 
+    year: goalYear, 
+    visionDistance, 
+    availableYears, 
+    switchYear, 
+    updateDimension, 
+    resetVisionDistance, 
+    calculateVisionDistance,
+    isCalculating 
+  } = useVisionEngine();
 
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editValue, setEditValue] = useState('');
   const [newGoalTitle, setNewGoalTitle] = useState('');
   const [newProjectTitle, setNewProjectTitle] = useState('');
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
-  const [goalYear, setGoalYear] = useState(new Date().getFullYear());
   const [editingProjectTitle, setEditingProjectTitle] = useState<string | null>(null);
   const [editProjectValue, setEditProjectValue] = useState('');
 
@@ -68,13 +79,6 @@ export default function GoalsPage() {
     [goals, goalYear]
   );
 
-  const availableYears = useMemo(() => {
-    const years = [...new Set(goals.map((g) => g.year))].sort((a, b) => b - a);
-    const current = new Date().getFullYear();
-    if (!years.includes(current)) years.unshift(current);
-    return years;
-  }, [goals]);
-
   const hasCurrentYearGoals = availableYears.includes(new Date().getFullYear());
   const hasGoalYearGoals = availableYears.includes(goalYear);
 
@@ -103,7 +107,7 @@ export default function GoalsPage() {
             {availableYears.map((y) => (
               <button
                 key={y}
-                onClick={() => setGoalYear(y)}
+                onClick={() => switchYear(y)}
                 className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all ${
                   y === goalYear
                     ? 'bg-[var(--success)] text-white'
@@ -117,7 +121,7 @@ export default function GoalsPage() {
               <button
                 onClick={() => {
                   if (window.confirm(`为 ${new Date().getFullYear()} 年创建默认目标吗？`)) {
-                    setGoalYear(new Date().getFullYear());
+                    switchYear(new Date().getFullYear());
                     // 延迟添加确保状态已更新
                     setTimeout(handleAddYearGoals, 0);
                   }
@@ -340,9 +344,23 @@ export default function GoalsPage() {
 
       {/* Vision Distance */}
       <div className="distance-card">
-        <SectionHeader dot="accent" title="Vision Distance" />
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full dot-pulse" style={{ background: 'var(--accent)' }} />
+            <h2 className="section-title" style={{ color: 'var(--accent)' }}>Vision Distance</h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={calculateVisionDistance}
+              className="text-[10px] text-[var(--accent)] bg-[var(--bg-subtle)] px-2.5 py-1 rounded-md hover:bg-[var(--bg-hover)] transition-colors"
+              disabled={isCalculating}
+            >
+              {isCalculating ? '计算中...' : '自动计算'}
+            </button>
+          </div>
+        </div>
         <p className="text-[12px] text-[var(--text-muted)] mb-4">你离理想中的自己还有多远？</p>
-        <VisionDistance data={visionDistance} onUpdate={updateVisionDistance} onReset={resetVisionDistance} />
+        <VisionDistance data={visionDistance} onUpdate={updateDimension} onReset={resetVisionDistance} />
       </div>
     </>
   );
