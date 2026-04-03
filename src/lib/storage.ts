@@ -64,7 +64,8 @@ import { createClient } from '@supabase/supabase-js';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
 
-const useSupabase = !!(SUPABASE_URL && SUPABASE_KEY);
+// 暂时禁用 Supabase，使用 localStorage 回退
+const useSupabase = false; // !!(SUPABASE_URL && SUPABASE_KEY);
 
 if (useSupabase) {
   console.log('Supabase connected:', SUPABASE_URL);
@@ -76,30 +77,9 @@ const supabase = useSupabase ? createClient(SUPABASE_URL!, SUPABASE_KEY!) : null
 
 /** 直接用 fetch 调 Supabase REST API 写入（绕过 SDK 可能的序列化问题） */
 async function supabaseUpsert(key: string, value: unknown): Promise<{ ok: boolean; error?: string }> {
-  if (!useSupabase || !supabase) {
-    // Fallback: 保存到 localStorage
-    try {
-      localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
-      return { ok: true };
-    } catch (e) {
-      return { ok: false, error: String(e) };
-    }
-  }
+  // 暂时完全使用 localStorage
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/app_data`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
-        'Prefer': 'resolution=merge-duplicates',
-      },
-      body: JSON.stringify({ key, value }),
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      return { ok: false, error: `HTTP ${res.status}: ${text}` };
-    }
+    localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
     return { ok: true };
   } catch (e) {
     return { ok: false, error: String(e) };
@@ -110,25 +90,23 @@ async function supabaseUpsert(key: string, value: unknown): Promise<{ ok: boolea
 const cache: Record<string, string | null> = {};
 let initialized = false;
 
-/** 初始化：从 Supabase 拉取所有数据到内存缓存 */
+/** 初始化：从 localStorage 加载数据到内存缓存 */
 async function init(): Promise<void> {
   if (initialized) return;
   try {
-    if (supabase) {
-      const { data, error } = await supabase.from('app_data').select('key, value');
-      if (!error && data) {
-        for (const row of data) {
-          if (typeof row.value === 'string') {
-            cache[row.key] = row.value;
-          } else if (row.value !== null && row.value !== undefined) {
-            cache[row.key] = JSON.stringify(row.value);
-          }
+    // 从 localStorage 加载数据
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key) {
+        const value = localStorage.getItem(key);
+        if (value !== null) {
+          cache[key] = value;
         }
       }
     }
     initialized = true;
   } catch (e) {
-    console.warn('Supabase init failed, using localStorage fallback:', e);
+    console.warn('LocalStorage init failed:', e);
     initialized = true; // 避免反复重试
   }
 }
@@ -143,34 +121,22 @@ export function getItem(key: string): string | null {
   return cache[key] ?? null;
 }
 
-/** 设置数据（同步写缓存 + 异步写 Supabase） */
+/** 设置数据（同步写缓存 + localStorage） */
 export function setItem(key: string, value: string): void {
   cache[key] = value;
   // 同步写 localStorage 作为备用
   try { localStorage.setItem(key, value); } catch {}
-  // 异步写入 Supabase，不阻塞 UI
-  if (supabase) {
-    supabase.from('app_data').upsert(
-      { key, value: JSON.parse(value) },
-      { onConflict: 'key' }
-    ).then(({ error }) => {
-      if (error) console.warn('Supabase write error:', error);
-    });
-  }
+  // 暂时禁用 Supabase 写入
 }
 
 /** 删除数据 */
 export function removeItem(key: string): void {
   delete cache[key];
   try { localStorage.removeItem(key); } catch {}
-  if (supabase) {
-    supabase.from('app_data').delete().eq('key', key).then(({ error }) => {
-      if (error) console.warn('Supabase delete error:', error);
-    });
-  }
+  // 暂时禁用 Supabase 删除
 }
 
-/** 迁移 localStorage 数据到 Supabase（首次使用时调用） */
+/** 迁移 localStorage 数据到缓存（首次使用时调用） */
 export async function migrateFromLocalStorage(): Promise<number> {
   const keysToMigrate = [
     'life-os-habits',
@@ -192,23 +158,8 @@ export async function migrateFromLocalStorage(): Promise<number> {
     const value = localStorage.getItem(prefix);
     if (value) {
       cache[prefix] = value;
-      if (supabase) {
-        try {
-          const { error } = await supabase.from('app_data').upsert(
-            { key: prefix, value: JSON.parse(value) },
-            { onConflict: 'key' }
-          );
-          if (!error) migrated++;
-        } catch (e) {
-          console.warn(`Failed to migrate ${prefix}:`, e);
-        }
-      }
+      migrated++;
     }
-  }
-
-  // 迁移动态 key（today-xxx 和 awareness-xxx）
-  for (let i = 0; i < 0; i++) {
-    // localStorage 不支持枚举，动态 key 在使用时自动同步
   }
 
   // 迁移所有 localStorage 中 life-os-today- 和 life-os-awareness- 的 key
@@ -224,17 +175,7 @@ export async function migrateFromLocalStorage(): Promise<number> {
     const value = localStorage.getItem(key);
     if (value) {
       cache[key] = value;
-      if (supabase) {
-        try {
-          await supabase.from('app_data').upsert(
-            { key, value: JSON.parse(value) },
-            { onConflict: 'key' }
-          );
-          migrated++;
-        } catch (e) {
-          console.warn(`Failed to migrate ${key}:`, e);
-        }
-      }
+      migrated++;
     }
   }
 
