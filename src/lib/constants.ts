@@ -40,7 +40,8 @@ export const DIMENSIONS = [
   { key: 'growth', label: 'Growth', icon: '↑', color: '#9B8FD6' },
 ] as const;
 
-export const DISTANCE_DIMS = [
+// Vision Distance 默认值 - 用于 Reset
+export const DISTANCE_DIMS_DEFAULT = [
   { label: '身体健康', color: '#5BAD6F', current: 65 },
   { label: '内在稳定', color: '#5B9BD5', current: 55 },
   { label: '家庭关系', color: '#E8963F', current: 78 },

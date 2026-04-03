@@ -77,7 +77,7 @@ function App() {
   // ---- Main App ----
   return (
     <Layout activePage={activePage} onPageChange={setActivePage}>
-      {activePage === 'dashboard' && <DashboardPage />}
+      {activePage === 'dashboard' && <DashboardPage onPageChange={setActivePage} />}
       {activePage === 'reflect' && <ReflectPage />}
       {activePage === 'goals' && <GoalsPage />}
       {activePage === 'library' && <LibraryPage />}

@@ -1,11 +1,10 @@
 import { useState, useMemo } from 'react';
 import { useGoals } from '../hooks';
 import { useGoalProgress } from '../hooks/useGoalProgress';
-import { DISTANCE_DIMS } from '../lib/constants';
 import type { Goal } from '../types';
 
 export default function GoalsPage() {
-  const { goals, projects, updateProgress, addGoal, deleteGoal, addProject, deleteProject, updateProjectTitle, updateProjectStatus } = useGoals();
+  const { goals, projects, visionDistance, updateProgress, addGoal, deleteGoal, addProject, deleteProject, updateProjectTitle, updateProjectStatus, updateVisionDistance, resetVisionDistance } = useGoals();
   const { details } = useGoalProgress(goals);
 
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -40,7 +39,7 @@ export default function GoalsPage() {
 
   const handleAddGoal = () => {
     if (newGoalTitle.trim()) {
-      addGoal(newGoalTitle.trim());
+      addGoal(newGoalTitle.trim(), 'Click Edit to update', '#C9A96E', 'growth', goalYear);
       setNewGoalTitle('');
     }
   };
@@ -76,6 +75,20 @@ export default function GoalsPage() {
     return years;
   }, [goals]);
 
+  const hasCurrentYearGoals = availableYears.includes(new Date().getFullYear());
+  const hasGoalYearGoals = availableYears.includes(goalYear);
+
+  const handleAddYearGoals = () => {
+    // 为当前选中的年份创建默认目标
+    const defaultGoalsForYear = [
+      { title: '冥想习惯养成', desc: '每天冥想10分钟', progress: 0, color: '#5BAD6F', dimension: 'energy' as const, year: goalYear, autoCalc: { type: 'habit_rate' as const, habit: '冥想', windowDays: 30 } },
+      { title: '读完12本书', desc: '每月1本', progress: 0, color: '#5B9BD5', dimension: 'growth' as const, year: goalYear, autoCalc: { type: 'library_count' as const, itemType: 'book' as const, statusFilter: 'completed', target: 12 } },
+      { title: '副业收入目标', desc: 'AI相关项目或内容创作', progress: 0, color: '#C9A96E', dimension: 'workMoney' as const, year: goalYear, autoCalc: { type: 'money_monthly' as const, category: 'freelance', direction: 'income' as const, target: 5000 } },
+      { title: '体重管理', desc: '达到目标体重', progress: 0, color: '#E8963F', dimension: 'energy' as const, year: goalYear },
+    ];
+    defaultGoalsForYear.forEach(g => addGoal(g.title, g.desc, g.color, g.dimension, g.year, g.autoCalc));
+  };
+
   const toggleProjectStatus = (title: string, current: 'active' | 'planning' | 'completed') => {
     const next = current === 'active' ? 'completed' : current === 'completed' ? 'planning' : 'active';
     updateProjectStatus(title, next);
@@ -86,7 +99,7 @@ export default function GoalsPage() {
       {/* Goals */}
       <div className="card-base">
         <SectionHeader dot="success" title={`${goalYear} Goals`} extra={
-          <div className="flex gap-1">
+          <div className="flex gap-1 items-center">
             {availableYears.map((y) => (
               <button
                 key={y}
@@ -100,10 +113,38 @@ export default function GoalsPage() {
                 {y}
               </button>
             ))}
+            {goalYear !== new Date().getFullYear() && (
+              <button
+                onClick={() => {
+                  if (window.confirm(`为 ${new Date().getFullYear()} 年创建默认目标吗？`)) {
+                    setGoalYear(new Date().getFullYear());
+                    // 延迟添加确保状态已更新
+                    setTimeout(handleAddYearGoals, 0);
+                  }
+                }}
+                className="px-2 py-1 rounded-lg text-[11px] font-medium text-[var(--success)] hover:bg-[var(--success)]/10 transition-colors"
+              >
+                + New
+              </button>
+            )}
           </div>
         } />
         <div className="flex flex-col gap-2.5">
-          {filteredGoals.map((g, idx) => {
+          {filteredGoals.length === 0 ? (
+            <div className="text-center py-8">
+              <div className="text-[12px] text-[var(--text-muted)] mb-3">
+                {goalYear === new Date().getFullYear() 
+                  ? `还没有${goalYear}年的目标` 
+                  : `${goalYear}年还没有目标`}
+              </div>
+              <button
+                onClick={handleAddYearGoals}
+                className="px-4 py-2 rounded-lg bg-[var(--success)]/10 text-[var(--success)] text-[12px] font-medium hover:bg-[var(--success)]/20 transition-colors"
+              >
+                创建 {goalYear} 年目标
+              </button>
+            </div>
+          ) : filteredGoals.map((g, idx) => {
             const originalIdx = goals.indexOf(g);
             const detail = details[originalIdx];
             const hasAutoCalc = !!g.autoCalc;
@@ -200,7 +241,7 @@ export default function GoalsPage() {
                 )}
               </div>
             );
-          })}
+          }))}
         </div>
         <div className="flex items-center gap-2 mt-4">
           <input
@@ -301,7 +342,7 @@ export default function GoalsPage() {
       <div className="distance-card">
         <SectionHeader dot="accent" title="Vision Distance" />
         <p className="text-[12px] text-[var(--text-muted)] mb-4">你离理想中的自己还有多远？</p>
-        <VisionDistance />
+        <VisionDistance data={visionDistance} onUpdate={updateVisionDistance} onReset={resetVisionDistance} />
       </div>
     </>
   );
@@ -319,14 +360,65 @@ function SectionHeader({ dot, title }: { dot: string; title: string }) {
   );
 }
 
-function VisionDistance() {
+function VisionDistance({ data, onUpdate, onReset }: {
+  data: typeof DISTANCE_DIMS_DEFAULT;
+  onUpdate: (index: number, value: number) => void;
+  onReset: () => void;
+}) {
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editValue, setEditValue] = useState('');
+
+  const handleEdit = (index: number, current: number) => {
+    setEditingIndex(index);
+    setEditValue(String(current));
+  };
+
+  const handleSave = (index: number) => {
+    const val = parseInt(editValue);
+    if (!isNaN(val)) {
+      onUpdate(index, val);
+    }
+    setEditingIndex(null);
+  };
+
   return (
     <>
-      {DISTANCE_DIMS.map((dim) => (
+      <div className="flex justify-end mb-2">
+        <button
+          onClick={onReset}
+          className="text-[10px] text-[var(--text-muted)] hover:text-[var(--warning)] transition-colors"
+        >
+          Reset
+        </button>
+      </div>
+      {data.map((dim, idx) => (
         <div key={dim.label} className="mb-4 last:mb-0">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[12px] font-medium text-[var(--text-secondary)]">{dim.label}</span>
-            <span className="text-[11px] font-semibold" style={{ color: dim.color }}>{dim.current}%</span>
+            {editingIndex === idx ? (
+              <div className="flex items-center gap-1">
+                <input
+                  type="number"
+                  className="w-12 text-[11px] px-1.5 py-0.5 rounded bg-[var(--bg-card)] border border-[var(--border)] text-center outline-none"
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  min={0}
+                  max={100}
+                  autoFocus
+                  onKeyDown={(e) => e.key === 'Enter' && handleSave(idx)}
+                  onBlur={() => handleSave(idx)}
+                />
+                <span className="text-[10px] text-[var(--text-muted)]">%</span>
+              </div>
+            ) : (
+              <button
+                onClick={() => handleEdit(idx, dim.current)}
+                className="text-[11px] font-semibold hover:opacity-70 transition-opacity cursor-pointer"
+                style={{ color: dim.color }}
+              >
+                {dim.current}%
+              </button>
+            )}
           </div>
           <div className="h-2 bg-[var(--bg-subtle)] rounded overflow-hidden">
             <div className="h-full rounded transition-all duration-1000" style={{ width: `${dim.current}%`, background: dim.color }} />

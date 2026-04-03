@@ -6,7 +6,7 @@ export function formatDate(d: Date): string {
 }
 
 export function formatDateCN(dateStr: string): string {
-  const d = new Date(dateStr);
+  const d = new Date(dateStr + 'T00:00:00');
   const weeks = ['日', '一', '二', '三', '四', '五', '六'];
   return `${d.getMonth() + 1}月${d.getDate()}日 周${weeks[d.getDay()]}`;
 }
