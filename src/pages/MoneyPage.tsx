@@ -4,12 +4,13 @@ import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '../lib/constants';
 
 export default function MoneyPage() {
   const { todayStr } = useToday();
-  const { records, addRecord, clearRecords, deleteRecord, removeDemoData, getWeeklyData } = useMoney();
+  const { records, addRecord, deleteRecord, getWeeklyData } = useMoney();
   const [moneyType, setMoneyType] = useState<'expense' | 'income'>('expense');
   const [category, setCategory] = useState('');
   const [amount, setAmount] = useState('');
   const [note, setNote] = useState('');
   const [selectedMonth, setSelectedMonth] = useState(todayStr.slice(0, 7));
+  const [deleteMode, setDeleteMode] = useState(false);
   const [showMonthPicker, setShowMonthPicker] = useState(false);
   const [pickerYear, setPickerYear] = useState(parseInt(todayStr.slice(0, 4)));
   const [pickerMonth, setPickerMonth] = useState(parseInt(todayStr.slice(5, 7)));
@@ -116,26 +117,6 @@ export default function MoneyPage() {
             >
               ›
             </button>
-            <button
-              onClick={() => {
-                const ok = window.confirm('确定要清除所有演示数据吗？这会删除看起来像自动生成的旧记录，保留您最近添加的记录。');
-                if (ok) removeDemoData();
-              }}
-              className="ml-1 px-2 py-1 rounded-md text-[12px] hover:bg-[var(--bg-hover)] text-[var(--warning)] transition-colors"
-              title="清除演示数据"
-            >
-              清除假数据
-            </button>
-            <button
-              onClick={() => {
-                const ok = window.confirm('确定要清空所有 Money 记录吗？此操作不可恢复。');
-                if (ok) clearRecords();
-              }}
-              className="ml-1 px-2 py-1 rounded-md text-[12px] hover:bg-[var(--bg-hover)] text-[var(--danger)] transition-colors"
-              title="清空所有记录"
-            >
-              清空
-            </button>
           </div>
         }
       />
@@ -236,6 +217,16 @@ export default function MoneyPage() {
         <input type="number" className="today-input w-28" placeholder="Amount" value={amount} onChange={(e) => setAmount(e.target.value)} />
         <input type="text" className="today-input flex-1 min-w-[120px]" placeholder="Note" value={note} onChange={(e) => setNote(e.target.value)} />
         <button onClick={handleAdd} className="btn-save">Add</button>
+        <button
+          onClick={() => setDeleteMode(!deleteMode)}
+          className={`px-3 py-1.5 rounded-lg text-[12px] font-medium transition-all ${
+            deleteMode
+              ? 'bg-[var(--danger)] text-white'
+              : 'bg-[var(--bg-subtle)] text-[var(--text-muted)] hover:bg-[var(--bg-hover)]'
+          }`}
+        >
+          {deleteMode ? '取消删除' : 'Delete'}
+        </button>
       </div>
 
       <div className="mb-5">
@@ -262,7 +253,9 @@ export default function MoneyPage() {
             <div className="text-center py-5 text-[12px] text-[var(--text-muted)]">本月暂无记录</div>
           ) : (
             monthRecords.map((r) => (
-              <div key={r.id} className="flex items-center gap-2.5 p-2 px-2.5 rounded-lg bg-[var(--bg-subtle)] text-[12px] hover:bg-[var(--bg-hover)] transition-colors group">
+              <div key={r.id} className={`flex items-center gap-2.5 p-2 px-2.5 rounded-lg text-[12px] transition-colors ${
+                deleteMode ? 'bg-[var(--danger-light)] hover:bg-[var(--danger)]/20 cursor-pointer' : 'bg-[var(--bg-subtle)] hover:bg-[var(--bg-hover)]'
+              }`}>
                 <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: r.categoryColor }} />
                 <div className="flex-1 min-w-0">
                   <div className="text-[var(--text-secondary)] font-medium">{r.categoryLabel}</div>
@@ -276,15 +269,15 @@ export default function MoneyPage() {
                     <div className="text-[10px] text-[var(--text-muted)]">{r.date}</div>
                   </div>
                   <button
-                    onClick={() => {
-                      if (window.confirm('确定要删除这条记录吗？')) {
-                        deleteRecord(r.id);
-                      }
-                    }}
-                    className="text-[10px] text-[var(--text-muted)] hover:text-[var(--danger)] opacity-0 group-hover:opacity-100 transition-opacity px-1.5 py-0.5 hover:bg-[var(--danger-light)] rounded"
+                    onClick={() => deleteRecord(r.id)}
+                    className={`text-[10px] px-1.5 py-0.5 rounded transition-all ${
+                      deleteMode
+                        ? 'text-white bg-[var(--danger)] hover:bg-[var(--danger)]/80'
+                        : 'text-[var(--text-muted)] hover:text-[var(--danger)]'
+                    }`}
                     title="删除记录"
                   >
-                    删除
+                    ×
                   </button>
                 </div>
               </div>
