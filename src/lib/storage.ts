@@ -9,74 +9,147 @@ const SESSION_KEY = '__auth_session__';
 
 /** 检查是否已设置密码（需要等 storage 初始化完成） */
 export function isPasswordSet(): boolean {
-  return !!cache[AUTH_KEY];
+  console.log('isPasswordSet called');
+  console.log('AUTH_KEY:', AUTH_KEY);
+  console.log('cache[AUTH_KEY]:', cache[AUTH_KEY]);
+  
+  // 先检查缓存
+  if (cache[AUTH_KEY]) {
+    console.log('Password found in cache');
+    return true;
+  }
+  
+  // 如果没有在缓存中，检查 localStorage
+  try {
+    console.log('Checking localStorage for key:', AUTH_KEY);
+    const stored = localStorage.getItem(AUTH_KEY);
+    console.log('localStorage.getItem result:', stored);
+    if (stored) {
+      cache[AUTH_KEY] = stored; // 更新缓存
+      console.log('Updated cache, password is set');
+      return true;
+    } else {
+      console.log('No password found in localStorage');
+    }
+  } catch (e) {
+    console.warn('LocalStorage read in isPasswordSet failed:', e);
+  }
+  
+  console.log('Password not set');
+  return false;
 }
 
 /** 验证密码是否正确 */
 export async function checkPassword(input: string): Promise<boolean> {
+  console.log('checkPassword called with input:', input);
+  console.log('AUTH_KEY:', AUTH_KEY);
+  console.log('cache[AUTH_KEY]:', cache[AUTH_KEY]);
+  
   // 先从缓存读取
   let stored = cache[AUTH_KEY];
   
   // 如果缓存没有，尝试从 localStorage 读取
   if (!stored) {
     try {
+      console.log('Checking localStorage for key:', AUTH_KEY);
       stored = localStorage.getItem(AUTH_KEY);
+      console.log('localStorage.getItem result:', stored);
       if (stored) {
         cache[AUTH_KEY] = stored;
+        console.log('Updated cache with localStorage value');
       }
     } catch (e) {
       console.warn('LocalStorage read failed:', e);
     }
   }
   
-  if (!stored) return false;
+  if (!stored) {
+    console.log('No password found in cache or localStorage');
+    // 检查 localStorage 中所有键
+    try {
+      console.log('All localStorage keys:');
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        console.log(`  ${key}: ${localStorage.getItem(key)?.substring(0, 20)}...`);
+      }
+    } catch (e) {
+      console.log('Cannot list localStorage:', e);
+    }
+    return false;
+  }
   
-  console.log('Checking password, stored value:', stored);
-  console.log('Input password:', input);
+  console.log('Checking password, stored value:', stored, 'input:', input);
   
   // 存储的可能是纯字符串密码，也可能是旧版 JSON 格式
   try {
     const parsed = JSON.parse(stored);
     console.log('Parsed as JSON:', parsed);
-    return parsed.password === input;
+    // 检查是否是旧版格式 { password: "xxx" }
+    if (parsed && typeof parsed === 'object' && parsed.password) {
+      const match = parsed.password === input;
+      console.log('Compared JSON password, match:', match);
+      return match;
+    }
+    // 如果不是标准格式，尝试直接比较
+    const match = String(parsed) === input;
+    console.log('Compared as stringified JSON, match:', match);
+    return match;
   } catch {
     // 不是 JSON，直接当字符串比较
-    console.log('Compared as strings:', stored === input);
-    return stored === input;
+    const match = stored === input;
+    console.log('Compared as strings, match:', match);
+    return match;
   }
 }
 
 /** 设置密码（首次使用时） */
 export async function setPassword(password: string): Promise<boolean> {
-  const result = await supabaseUpsert(AUTH_KEY, password);
-  if (result.ok) {
-    cache[AUTH_KEY] = password;
-    console.log('Password saved successfully');
-    return true;
-  }
-  console.error('SetPassword failed:', result.error);
-  // 如果写入失败，也保存到 localStorage 作为回退
-  try {
-    localStorage.setItem(AUTH_KEY, password);
-    return true;
-  } catch (e) {
-    console.error('LocalStorage fallback also failed:', e);
-    return false;
-  }
+  cache[AUTH_KEY] = password;
+  localStorage.setItem(AUTH_KEY, password);
+  return true;
 }
 
 /** 设置/检查 sessionStorage 登录状态 */
 export function setSession(): void {
-  sessionStorage.setItem(SESSION_KEY, Date.now().toString());
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.setItem(SESSION_KEY, Date.now().toString());
+    } else {
+      console.warn('sessionStorage is not available, using memory session');
+      // 在内存中模拟 session
+      cache[SESSION_KEY] = Date.now().toString();
+    }
+  } catch (e) {
+    console.warn('Failed to set session:', e);
+    // 即使 sessionStorage 失败，也继续
+  }
 }
 
 export function hasSession(): boolean {
-  return !!sessionStorage.getItem(SESSION_KEY);
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      return !!sessionStorage.getItem(SESSION_KEY);
+    } else {
+      // 检查内存中的 session
+      return !!cache[SESSION_KEY];
+    }
+  } catch (e) {
+    console.warn('Failed to check session:', e);
+    return false;
+  }
 }
 
 /** 清除登录状态 */
 export function clearSession(): void {
-  sessionStorage.removeItem(SESSION_KEY);
+  try {
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem(SESSION_KEY);
+    }
+    // 同时清除内存中的 session
+    delete cache[SESSION_KEY];
+  } catch (e) {
+    console.warn('Failed to clear session:', e);
+  }
 }
 
 /**
@@ -102,16 +175,7 @@ if (useSupabase) {
 
 const supabase = useSupabase ? createClient(SUPABASE_URL!, SUPABASE_KEY!) : null;
 
-/** 直接用 fetch 调 Supabase REST API 写入（绕过 SDK 可能的序列化问题） */
-async function supabaseUpsert(key: string, value: unknown): Promise<{ ok: boolean; error?: string }> {
-  // 暂时完全使用 localStorage
-  try {
-    localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, error: String(e) };
-  }
-}
+
 
 // 内存缓存，避免每次都请求 Supabase
 const cache: Record<string, string | null> = {};

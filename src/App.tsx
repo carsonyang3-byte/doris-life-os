@@ -12,7 +12,7 @@ import type { PageType } from './types';
 import { formatDateCN } from './lib/utils';
 import {
   ensureStorageReady, migrateFromLocalStorage,
-  isPasswordSet, checkPassword, setPassword,
+  isPasswordSet, checkPassword, setPassword as persistAuthPassword,
   setSession, hasSession, clearSession,
 } from './lib/storage';
 
@@ -116,13 +116,13 @@ function AuthGate({ isSetup, onAuthenticated }: { isSetup: boolean; onAuthentica
         return;
       }
       setLoading(true);
-      const ok = await setPassword(password);
+      const ok = await persistAuthPassword(password);
       setLoading(false);
       if (ok) {
         setSession();
         onAuthenticated();
       } else {
-        setError('设置密码失败，请检查网络后重试');
+        setError('设置密码失败，请检查浏览器设置或尝试使用其他浏览器');
       }
     } else {
       setLoading(true);
