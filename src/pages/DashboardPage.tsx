@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, Fragment } from 'react';
 import { ChevronRight, ChevronLeft, CheckCircle2, Sun, Eye, Sparkles, CalendarDays, Settings, RefreshCw } from 'lucide-react';
-import { useToday, useTodayData, useQuotes, useWeeklyFocus, useHabits, useMoney, useGoals, useScoring, useLibrary } from '../hooks';
+import { useToday, useTodayData, useQuotes, useWeeklyFocus, useHabits, useMoney, useGoals, useScoring, useLibrary, useVisionEngine } from '../hooks';
 import { useAIInsight } from '../hooks/useAIInsight';
 import type { InsightTab } from '../hooks/useAIInsight';
 import { useGoalProgress } from '../hooks/useGoalProgress';
