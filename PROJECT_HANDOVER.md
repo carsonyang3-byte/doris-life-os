@@ -136,8 +136,8 @@ doris-life-os/
 4. 登录成功 → `sessionStorage` 保持登录状态（关闭浏览器需重新输入）
 
 **密码存储格式**：
-- 新版代码：直接存纯字符串（如 `160508`）
-- 旧版代码：存 JSON 对象 `{"password":"160508","createdAt":1774974971013}`
+- 新版代码：直接存纯字符串（示例占位，勿在文档中写真实密码）
+- 旧版代码：存 JSON 对象 `{"password":"<示例>","createdAt":1774974971013}`
 - `checkPassword()` 兼容两种格式：先尝试 `JSON.parse`，失败则直接字符串比较
 
 **安全说明**：
@@ -253,8 +253,7 @@ GitHub Secrets 中也需配置相同变量：
 **当前状态**：
 - 线上运行的是旧版代码
 - 旧版代码的 `setPassword` 用 `JSON.stringify({ password, createdAt })` 存 JSON 对象
-- 密码已通过脚本直接写入 Supabase，格式兼容旧代码：`{"password":"160508","createdAt":1774974971013}`
-- 用户当前密码：`160508`
+- 若曾用脚本写入 Supabase，请使用 JSON 格式：`{"password":"<示例>","createdAt":<时间戳>}`（勿将真实密码写入仓库或文档）
 
 **临时解决方案**：
 密码以旧代码兼容的 JSON 格式存入 Supabase，旧代码可以正常读取。新代码的修改（如 `supabaseUpsert` 使用 `resolution=merge-duplicates`）已在本地但未部署。
