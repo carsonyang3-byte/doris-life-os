@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Storage 功能测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }
+        .test-result { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeaa7; }
+        button { padding: 8px 16px; margin: 5px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background-color: #0056b3; }
+        pre { background-color: #f8f9fa; padding: 10px; border-radius: 4px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>Life OS Storage 功能测试</h1>
+    <p>测试 localStorage 和 sessionStorage 的可用性</p>
+    
+    <div id="test1" class="test-result">
+        <h3>测试 1: localStorage 可用性</h3>
+        <button onclick="testLocalStorage()">测试 localStorage</button>
+        <div id="localStorageResult"></div>
+    </div>
+    
+    <div id="test2" class="test-result">
+        <h3>测试 2: sessionStorage 可用性</h3>
+        <button onclick="testSessionStorage()">测试 sessionStorage</button>
+        <div id="sessionStorageResult"></div>
+    </div>
+    
+    <div id="test3" class="test-result">
+        <h3>测试 3: 模拟密码设置和验证</h3>
+        <div>
+            <label for="password">密码: </label>
+            <input type="password" id="password" placeholder="输入测试密码">
+            <button onclick="testSetPassword()">设置密码</button>
+            <button onclick="testCheckPassword()">验证密码</button>
+        </div>
+        <div id="passwordTestResult"></div>
+    </div>
+    
+    <div id="test4" class="test-result">
+        <h3>测试 4: 浏览器环境信息</h3>
+        <div id="browserInfo"></div>
+    </div>
+
+    <script>
+        function testLocalStorage() {
+            const result = document.getElementById('localStorageResult');
+            try {
+                if (typeof localStorage === 'undefined') {
+                    result.innerHTML = '<div class="error">❌ localStorage 未定义</div>';
+                    return;
+                }
+                
+                const testKey = 'lifeos_test_' + Date.now();
+                const testValue = '测试值_' + Math.random();
+                
+                localStorage.setItem(testKey, testValue);
+                const retrieved = localStorage.getItem(testKey);
+                localStorage.removeItem(testKey);
+                
+                if (retrieved === testValue) {
+                    result.innerHTML = '<div class="success">✅ localStorage 可用 - 写入、读取、删除都正常</div>';
+                } else {
+                    result.innerHTML = '<div class="error">❌ localStorage 读取的值与写入的不匹配</div>';
+                }
+            } catch (e) {
+                result.innerHTML = '<div class="error">❌ localStorage 测试失败: ' + e.message + '</div>';
+            }
+        }
+        
+        function testSessionStorage() {
+            const result = document.getElementById('sessionStorageResult');
+            try {
+                if (typeof sessionStorage === 'undefined') {
+                    result.innerHTML = '<div class="error">❌ sessionStorage 未定义</div>';
+                    return;
+                }
+                
+                const testKey = 'lifeos_session_test_' + Date.now();
+                const testValue = '会话测试值_' + Math.random();
+                
+                sessionStorage.setItem(testKey, testValue);
+                const retrieved = sessionStorage.getItem(testKey);
+                sessionStorage.removeItem(testKey);
+                
+                if (retrieved === testValue) {
+                    result.innerHTML = '<div class="success">✅ sessionStorage 可用 - 写入、读取、删除都正常</div>';
+                } else {
+                    result.innerHTML = '<div class="error">❌ sessionStorage 读取的值与写入的不匹配</div>';
+                }
+            } catch (e) {
+                result.innerHTML = '<div class="error">❌ sessionStorage 测试失败: ' + e.message + '</div>';
+            }
+        }
+        
+        function testSetPassword() {
+            const password = document.getElementById('password').value;
+            const result = document.getElementById('passwordTestResult');
+            
+            if (!password) {
+                result.innerHTML = '<div class="warning">⚠️ 请输入密码</div>';
+                return;
+            }
+            
+            try {
+                if (typeof localStorage === 'undefined') {
+                    result.innerHTML = '<div class="error">❌ localStorage 不可用，无法设置密码</div>';
+                    return;
+                }
+                
+                localStorage.setItem('lifeos_auth', password);
+                const stored = localStorage.getItem('lifeos_auth');
+                
+                if (stored === password) {
+                    result.innerHTML = '<div class="success">✅ 密码设置成功！</div>';
+                } else {
+                    result.innerHTML = '<div class="error">❌ 密码设置失败：存储的值不匹配</div>';
+                }
+            } catch (e) {
+                result.innerHTML = '<div class="error">❌ 密码设置失败: ' + e.message + '</div>';
+            }
+        }
+        
+        function testCheckPassword() {
+            const password = document.getElementById('password').value;
+            const result = document.getElementById('passwordTestResult');
+            
+            if (!password) {
+                result.innerHTML = '<div class="warning">⚠️ 请输入密码进行验证</div>';
+                return;
+            }
+            
+            try {
+                const stored = localStorage.getItem('lifeos_auth');
+                
+                if (!stored) {
+                    result.innerHTML = '<div class="warning">⚠️ 未找到已保存的密码，请先设置密码</div>';
+                    return;
+                }
+                
+                if (stored === password) {
+                    result.innerHTML = '<div class="success">✅ 密码验证成功！</div>';
+                } else {
+                    result.innerHTML = '<div class="error">❌ 密码验证失败：密码不匹配</div>';
+                }
+            } catch (e) {
+                result.innerHTML = '<div class="error">❌ 密码验证失败: ' + e.message + '</div>';
+            }
+        }
+        
+        // 显示浏览器信息
+        function displayBrowserInfo() {
+            const info = document.getElementById('browserInfo');
+            const html = `
+                <div class="test-result warning">
+                    <strong>浏览器信息:</strong><br>
+                    User Agent: ${navigator.userAgent}<br>
+                    语言: ${navigator.language}<br>
+                    平台: ${navigator.platform}<br>
+                    在线状态: ${navigator.onLine ? '在线' : '离线'}<br>
+                    Cookie 启用: ${navigator.cookieEnabled ? '是' : '否'}<br>
+                    localStorage 类型: ${typeof localStorage}<br>
+                    sessionStorage 类型: ${typeof sessionStorage}
+                </div>
+            `;
+            info.innerHTML = html;
+        }
+        
+        // 页面加载时显示浏览器信息
+        window.onload = displayBrowserInfo;
+    </script>
+</body>
+</html>
