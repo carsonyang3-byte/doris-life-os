@@ -14,14 +14,34 @@ export function isPasswordSet(): boolean {
 
 /** 验证密码是否正确 */
 export async function checkPassword(input: string): Promise<boolean> {
-  const stored = cache[AUTH_KEY];
+  // 先从缓存读取
+  let stored = cache[AUTH_KEY];
+  
+  // 如果缓存没有，尝试从 localStorage 读取
+  if (!stored) {
+    try {
+      stored = localStorage.getItem(AUTH_KEY);
+      if (stored) {
+        cache[AUTH_KEY] = stored;
+      }
+    } catch (e) {
+      console.warn('LocalStorage read failed:', e);
+    }
+  }
+  
   if (!stored) return false;
+  
+  console.log('Checking password, stored value:', stored);
+  console.log('Input password:', input);
+  
   // 存储的可能是纯字符串密码，也可能是旧版 JSON 格式
   try {
     const parsed = JSON.parse(stored);
+    console.log('Parsed as JSON:', parsed);
     return parsed.password === input;
   } catch {
     // 不是 JSON，直接当字符串比较
+    console.log('Compared as strings:', stored === input);
     return stored === input;
   }
 }
@@ -35,7 +55,14 @@ export async function setPassword(password: string): Promise<boolean> {
     return true;
   }
   console.error('SetPassword failed:', result.error);
-  return false;
+  // 如果写入失败，也保存到 localStorage 作为回退
+  try {
+    localStorage.setItem(AUTH_KEY, password);
+    return true;
+  } catch (e) {
+    console.error('LocalStorage fallback also failed:', e);
+    return false;
+  }
 }
 
 /** 设置/检查 sessionStorage 登录状态 */
