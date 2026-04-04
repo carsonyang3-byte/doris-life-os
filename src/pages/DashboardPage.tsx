@@ -16,7 +16,7 @@ export default function DashboardPage({ onPageChange }: DashboardPageProps) {
   const { todayStr, dateCN } = useToday();
   const { tasks, setTasks, happy, setHappy, awareness, setAwareness, save, saved } = useTodayData();
   const { items: libraryItems } = useLibrary();
-  const { current: quote, next, isFromLibrary, libraryCount } = useQuotes(libraryItems);
+  const { current: quote, next, isFromLibrary, libraryCount } = useQuotes(libraryItems, todayStr);
   const { focus, dimensions, updateFocus } = useWeeklyFocus();
   const { data: habitData, toggleHabit, getStreak, getJournalDays, getExerciseCount, getHeatmapData } = useHabits();
   const { records: moneyRecords, getWeeklyData } = useMoney();

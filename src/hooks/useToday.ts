@@ -59,21 +59,50 @@ export function useTodayData() {
   return { tasks, setTasks, happy, setHappy, awareness, setAwareness, save, saved };
 }
 
-export function useQuotes(libraryItems?: LibraryItem[]) {
-  // 从 Library 的笔记中提取金句
+function hashDateKey(dateStr: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < dateStr.length; i++) {
+    h ^= dateStr.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+export function useQuotes(libraryItems?: LibraryItem[], todayStr?: string) {
+  const dateKey = todayStr ?? formatDate(new Date());
+
   const libraryQuotes = useMemo<Quote[]>(() => {
     if (!libraryItems || libraryItems.length === 0) return [];
 
     const quotes: Quote[] = [];
     for (const item of libraryItems) {
+      if (item.wereadHighlights && item.wereadHighlights.length > 0) {
+        for (const h of item.wereadHighlights) {
+          const t = h.text?.trim() ?? '';
+          if (t.length >= 3) {
+            quotes.push({
+              text: t,
+              book: item.title,
+              author: item.creator || '微信读书',
+            });
+          }
+        }
+        continue;
+      }
       if (!item.note) continue;
-      // 从笔记中提取划线和笔记内容
-      const lines = item.note.split('\n').filter(l => l.trim());
+      const lines = item.note.split('\n').filter((l) => l.trim());
       for (const line of lines) {
         const trimmed = line.trim();
-        // 跳过元信息行（书评：、划线 X 条、笔记 X 条）
-        if (trimmed.startsWith('书评：') || trimmed.startsWith('划线') || trimmed.startsWith('笔记') || trimmed === '...') continue;
-        // 只要长度够的行就算金句
+        if (
+          trimmed.startsWith('书评：') ||
+          trimmed.startsWith('划线') ||
+          trimmed.startsWith('笔记') ||
+          trimmed.startsWith('微信读书') ||
+          trimmed === '...' ||
+          trimmed === '…'
+        ) {
+          continue;
+        }
         if (trimmed.length >= 10 && !trimmed.startsWith('http')) {
           quotes.push({
             text: trimmed,
@@ -86,20 +115,28 @@ export function useQuotes(libraryItems?: LibraryItem[]) {
     return quotes;
   }, [libraryItems]);
 
-  // 合并：Library 金句在前，默认金句在后
   const allQuotes = useMemo<Quote[]>(() => {
     if (libraryQuotes.length === 0) return [...QUOTES];
     return [...libraryQuotes, ...QUOTES];
   }, [libraryQuotes]);
 
-  const [index, setIndex] = useState(() => {
-    // 根据日期初始化，每天看到不同的
-    return Math.floor(Date.now() / 86400000) % allQuotes.length;
-  });
+  const libraryLen = libraryQuotes.length;
 
-  const current: Quote = allQuotes[index % allQuotes.length];
-  const isFromLibrary = index < libraryQuotes.length && libraryQuotes.length > 0;
-  const next = () => setIndex((i) => (i + 1) % allQuotes.length);
+  const dailyBase = useMemo(() => {
+    if (allQuotes.length === 0) return 0;
+    return hashDateKey(dateKey) % allQuotes.length;
+  }, [dateKey, allQuotes.length]);
 
-  return { current, next, index, isFromLibrary, libraryCount: libraryQuotes.length };
+  const [step, setStep] = useState(0);
+
+  useEffect(() => {
+    setStep(0);
+  }, [dateKey, libraryLen, allQuotes.length]);
+
+  const effIndex = (dailyBase + step) % (allQuotes.length || 1);
+  const current: Quote = allQuotes[effIndex] ?? QUOTES[0];
+  const isFromLibrary = libraryLen > 0 && effIndex < libraryLen;
+  const next = () => setStep((s) => s + 1);
+
+  return { current, next, index: effIndex, isFromLibrary, libraryCount: libraryLen };
 }

@@ -76,6 +76,13 @@ export interface Quote {
 
 export type PageType = 'dashboard' | 'reflect' | 'goals' | 'library' | 'journal' | 'money' | 'travel';
 
+/** 单条微信读书划线（与 Library 中书关联） */
+export interface WereadHighlightEntry {
+  text: string;
+  /** 展示用时间，如 2025-04-01 */
+  time: string;
+}
+
 export interface LibraryItem {
   id: number;
   type: 'book' | 'movie' | 'blog' | 'podcast';
@@ -85,6 +92,10 @@ export interface LibraryItem {
   rating?: number;
   status: 'reading' | 'completed' | 'abandoned' | 'in_progress';
   note?: string;
+  /** 微信读书 bookId，用于同步去重 */
+  wereadBookId?: string;
+  /** API 导入的划线列表（Daily Quote 优先从此读取） */
+  wereadHighlights?: WereadHighlightEntry[];
 }
 
 export interface JournalEntry {

@@ -1,7 +1,9 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useLibrary } from '../hooks';
 import { useToday } from '../hooks';
-import type { LibraryItem } from '../types';
+import type { LibraryItem, WereadHighlightEntry } from '../types';
+import { getWereadCookie, setWereadCookie } from '../lib/wereadCookie';
+import { fetchWereadImports, isWereadApiAvailable } from '../lib/wereadApi';
 
 const TYPE_CONFIG = {
   book: { label: 'Book', labelCN: '读书', color: '#7C9885', icon: '📚' },
@@ -201,11 +203,38 @@ function parseImportText(text: string): ParsedBook[] {
   return parseWereadText(trimmed);
 }
 
+function buildWereadExportJson(items: LibraryItem[]): string {
+  const highlights: Array<{
+    bookTitle: string;
+    author: string;
+    bookId: string | null;
+    text: string;
+    time: string;
+  }> = [];
+  for (const item of items) {
+    if (!item.wereadHighlights?.length) continue;
+    for (const h of item.wereadHighlights) {
+      highlights.push({
+        bookTitle: item.title,
+        author: item.creator ?? '',
+        bookId: item.wereadBookId ?? null,
+        text: h.text,
+        time: h.time,
+      });
+    }
+  }
+  return JSON.stringify(
+    { exportedAt: new Date().toISOString(), source: 'doris-life-os-library', highlights },
+    null,
+    2
+  );
+}
+
 // ========== 页面组件 ==========
 
 export default function LibraryPage() {
   const { todayStr } = useToday();
-  const { items, addItem, addItems, updateItem, deleteItem, byType, stats } = useLibrary();
+  const { items, addItem, addItems, deleteItem, byType, stats, upsertWereadImports } = useLibrary();
 
   const [activeTab, setActiveTab] = useState<ItemType | 'all'>('all');
   const [showAddForm, setShowAddForm] = useState(false);
@@ -224,6 +253,67 @@ export default function LibraryPage() {
   });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [wereadCookieInput, setWereadCookieInput] = useState('');
+  const [showWereadPanel, setShowWereadPanel] = useState(false);
+  const [wereadLoading, setWereadLoading] = useState(false);
+  const [wereadError, setWereadError] = useState('');
+  const [wereadOk, setWereadOk] = useState('');
+
+  useEffect(() => {
+    setWereadCookieInput(getWereadCookie());
+  }, []);
+
+  const saveWereadCookie = () => {
+    setWereadCookie(wereadCookieInput.trim());
+    setWereadOk('已保存到本机浏览器（仅 localStorage）');
+    setTimeout(() => setWereadOk(''), 2500);
+  };
+
+  const handleWereadApiImport = async () => {
+    setWereadError('');
+    setWereadOk('');
+    setWereadLoading(true);
+    try {
+      const { payloads, bookCount, markCount } = await fetchWereadImports();
+      if (payloads.length === 0) {
+        setWereadError('未拉取到划线（书架中可能没有笔记/划线，或接口返回为空）');
+        return;
+      }
+      upsertWereadImports(payloads);
+      setWereadOk(`已导入 ${bookCount} 本书，共 ${markCount} 条划线`);
+    } catch (e) {
+      setWereadError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setWereadLoading(false);
+    }
+  };
+
+  const wereadFlatList = useMemo(() => {
+    const rows: { book: string; author: string; text: string; time: string; itemId: number }[] = [];
+    for (const item of items) {
+      if (!item.wereadHighlights?.length) continue;
+      for (const h of item.wereadHighlights) {
+        rows.push({
+          book: item.title,
+          author: item.creator ?? '',
+          text: h.text,
+          time: h.time,
+          itemId: item.id,
+        });
+      }
+    }
+    return rows;
+  }, [items]);
+
+  const handleExportWereadJson = () => {
+    const blob = new Blob([buildWereadExportJson(items)], { type: 'application/json;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `weread-highlights-${todayStr}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
 
   const filteredItems = useMemo(() => {
     if (activeTab === 'all') return items;
@@ -261,23 +351,35 @@ export default function LibraryPage() {
 
   const handleConfirmImport = () => {
     if (!importPreview) return;
-    const newItems: Omit<LibraryItem, 'id'>[] = importPreview.map((book) => ({
-      type: 'book' as const,
-      title: book.title,
-      creator: book.author || '',
-      date: todayStr,
-      rating: 0,
-      status: 'completed' as const,
-      note: [
-        book.review ? `书评：${book.review}` : '',
-        book.highlights.length > 0
-          ? `划线 ${book.highlights.length} 条：\n${book.highlights.slice(0, 5).join('\n')}${book.highlights.length > 5 ? '\n...' : ''}`
-          : '',
-        book.notes.length > 0
-          ? `笔记 ${book.notes.length} 条：\n${book.notes.slice(0, 5).join('\n')}${book.notes.length > 5 ? '\n...' : ''}`
-          : '',
-      ].filter(Boolean).join('\n\n'),
-    }));
+    const newItems: Omit<LibraryItem, 'id'>[] = importPreview.map((book) => {
+      const wereadHighlights: WereadHighlightEntry[] = [
+        ...book.highlights.map((text) => ({ text, time: todayStr })),
+        ...book.notes.map((text) => ({ text, time: todayStr })),
+      ];
+      return {
+        type: 'book' as const,
+        title: book.title,
+        creator: book.author || '',
+        date: todayStr,
+        rating: 0,
+        status: 'completed' as const,
+        wereadHighlights: wereadHighlights.length > 0 ? wereadHighlights : undefined,
+        note: [
+          book.review ? `书评：${book.review}` : '',
+          wereadHighlights.length > 0
+            ? `共 ${wereadHighlights.length} 条划线/笔记（已结构化存储，供 Daily Quote 使用）`
+            : '',
+          wereadHighlights.length === 0 && book.highlights.length > 0
+            ? `划线 ${book.highlights.length} 条：\n${book.highlights.slice(0, 5).join('\n')}${book.highlights.length > 5 ? '\n...' : ''}`
+            : '',
+          wereadHighlights.length === 0 && book.notes.length > 0
+            ? `笔记 ${book.notes.length} 条：\n${book.notes.slice(0, 5).join('\n')}${book.notes.length > 5 ? '\n...' : ''}`
+            : '',
+        ]
+          .filter(Boolean)
+          .join('\n\n'),
+      };
+    });
     addItems(newItems);
     setShowImportModal(false);
     setImportText('');
@@ -353,7 +455,14 @@ export default function LibraryPage() {
             </button>
           ))}
         </div>
-        <div className="flex gap-2 ml-auto">
+        <div className="flex gap-2 ml-auto flex-wrap justify-end">
+          <button
+            type="button"
+            onClick={() => setShowWereadPanel((v) => !v)}
+            className="btn-sm px-3 py-1.5 text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded-lg transition-colors"
+          >
+            微信读书导入
+          </button>
           <button
             onClick={() => setShowImportModal(true)}
             className="btn-sm px-3 py-1.5 text-[12px] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:bg-[var(--bg-hover)] rounded-lg transition-colors"
@@ -381,6 +490,78 @@ export default function LibraryPage() {
           </button>
         </div>
       </div>
+
+      {/* 微信读书 API + 划线列表 */}
+      {showWereadPanel && (
+        <div className="card-base p-4 space-y-3 border border-[var(--border)]">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <h3 className="text-[14px] font-semibold text-[var(--text-primary)]">微信读书 · 划线同步</h3>
+            {wereadFlatList.length > 0 && (
+              <button type="button" onClick={handleExportWereadJson} className="btn-sm text-[12px]">
+                导出为 JSON
+              </button>
+            )}
+          </div>
+          <p className="text-[11px] text-[var(--text-muted)] leading-relaxed">
+            Cookie 仅保存在本机 localStorage，不会上传到任何服务器。在{' '}
+            <code className="text-[10px] bg-[var(--bg-subtle)] px-1 rounded">weread.qq.com</code>{' '}
+            登录后，从开发者工具 → Network 任意请求 → 请求头中复制完整 Cookie 粘贴到下方。
+            {!isWereadApiAvailable() && (
+              <span className="block mt-1 text-[var(--warning)]">
+                当前为静态部署：浏览器无法跨域调用微信读书接口。请在本机执行 npm run dev
+                打开本站后再点「从微信读书拉取」；或继续使用「导入笔记」粘贴插件导出内容。
+              </span>
+            )}
+          </p>
+          <textarea
+            className="today-input resize-none w-full font-mono text-[11px]"
+            rows={3}
+            placeholder="wr_name=...; wr_skey=...（完整 Cookie 字符串）"
+            value={wereadCookieInput}
+            onChange={(e) => setWereadCookieInput(e.target.value)}
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={saveWereadCookie} className="btn-sm text-[12px]">
+              保存 Cookie 到本地
+            </button>
+            <button
+              type="button"
+              onClick={handleWereadApiImport}
+              disabled={wereadLoading || !wereadCookieInput.trim() || !isWereadApiAvailable()}
+              className="btn-save text-[12px] disabled:opacity-50"
+            >
+              {wereadLoading ? '拉取中…' : '从微信读书拉取划线'}
+            </button>
+          </div>
+          {wereadError && <div className="text-[12px] text-[var(--danger)]">{wereadError}</div>}
+          {wereadOk && <div className="text-[12px] text-[var(--success)]">{wereadOk}</div>}
+
+          {wereadFlatList.length > 0 && (
+            <div className="pt-2 border-t border-[var(--border)]">
+              <div className="text-[12px] font-medium text-[var(--text-secondary)] mb-2">
+                已导入划线（{wereadFlatList.length} 条）
+              </div>
+              <div className="max-h-[320px] overflow-y-auto space-y-2 pr-1">
+                {wereadFlatList.map((row, i) => (
+                  <div
+                    key={`${row.itemId}-${i}-${row.text.slice(0, 20)}`}
+                    className="p-3 rounded-xl bg-[var(--bg-subtle)] text-[12px] leading-relaxed"
+                  >
+                    <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-[11px] text-[var(--text-muted)] mb-1">
+                      <span className="font-medium text-[var(--text-primary)]">{row.book}</span>
+                      {row.author && <span>{row.author}</span>}
+                      <span>{row.time}</span>
+                    </div>
+                    <p className="text-[var(--text-secondary)] whitespace-pre-wrap">{row.text}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Import Modal */}
       {showImportModal && (
