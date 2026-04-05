@@ -43,34 +43,35 @@ export async function checkPassword(input: string): Promise<boolean> {
     }
   }
   
-  console.log('=== checkPassword debug ===', { 
+  const debugInfo = { 
     hasStored: !!stored, 
     storedType: typeof stored,
     storedLength: stored?.length,
     inputLength: input?.length,
-    storedPreview: stored ? `[${stored.substring(0, 3)}...${stored.substring(stored.length - 2)}]` : 'null',
-    inputPreview: input ? `[${input.substring(0, 3)}...${input.substring(input.length - 2)}]` : 'null'
-  });
+    storedValue: stored ?? '<<<NULL>>>',
+    inputValue: input,
+    rawEqual: stored === input
+  };
+  console.log('=== checkPassword debug ===', JSON.stringify(debugInfo));
   
-  if (!stored) return false;
+  if (!stored) {
+    console.warn('!!! PASSWORD NOT FOUND IN LOCAL STORAGE !!! key:', AUTH_KEY);
+    return false;
+  }
   
   try {
     const parsed = JSON.parse(stored);
-    console.log('=== checkPassword parsed ===', { 
-      isObject: typeof parsed === 'object', 
-      hasPasswordField: !!(parsed && typeof parsed === 'object' && parsed.password)
-    });
     if (parsed && typeof parsed === 'object' && parsed.password) {
       const match = parsed.password === input;
-      console.log('=== checkPassword result (object path) ===', { match });
+      console.log('=== checkPassword result (object path) ===', JSON.stringify({ match }));
       return match;
     }
     const match = String(parsed) === input;
-    console.log('=== checkPassword result (string path) ===', { match });
+    console.log('=== checkPassword result (string path) ===', JSON.stringify({ match, parsed: String(parsed), input }));
     return match;
   } catch {
     const match = stored === input;
-    console.log('=== checkPassword result (raw path) ===', { match });
+    console.log('=== checkPassword result (raw path) ===', JSON.stringify({ match, stored, input }));
     return match;
   }
 }
