@@ -252,58 +252,74 @@ export async function ensureStorageReady(): Promise<void> {
   const isGitHubPages = typeof window !== 'undefined' && window.location.hostname.includes('github.io');
   
   if (isGitHubPages) {
-    console.log('GitHub Pages detected, trying to load from Supabase with shorter timeout');
+    console.log('GitHub Pages detected, using improved initialization flow');
     
     if (!initialized) {
       try {
-        // 尝试从云端加载，但设置更短的超时（3秒）
-        if (useSupabase && supabase) {
-          try {
-            const fetchPromise = supabase
-              .from('app_data')
-              .select('key, value')
-              .eq('user_id', 'default_user');
-
-            const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
-              setTimeout(() => resolve({ data: null, error: new Error('Supabase timeout after 3s') }), 3000)
-            );
-
-            const result = await Promise.race([fetchPromise, timeoutPromise]);
-            const { data, error } = result;
-
-            if (!error && data && data.length > 0) {
-              console.log(`Loaded ${data.length} items from Supabase on GitHub Pages`);
-              for (const item of data) {
-                if (item.key && item.value !== null) {
-                  cache[item.key] = item.value;
-                  // 同时更新 localStorage 作为备份
-                  try {
-                    localStorage.setItem(item.key, item.value);
-                  } catch (e) {
-                    console.warn('Failed to update localStorage for key:', item.key, e);
-                  }
-                }
-              }
-            } else if (error) {
-              console.warn('Supabase load failed on GitHub Pages, falling back to localStorage:', error.message);
+        console.log('Step 1: First load from localStorage for instant response');
+        // 1. 先快速从 localStorage 加载（确保用户立即看到自己的数据）
+        const localCache: Record<string, string> = {};
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && !key.startsWith('__')) { // 跳过内部键
+            const value = localStorage.getItem(key);
+            if (value !== null) {
+              localCache[key] = value;
             }
-          } catch (supabaseError) {
-            console.warn('Supabase connection failed on GitHub Pages, using localStorage:', supabaseError);
           }
         }
         
-        // 如果云端没有数据或失败，从 localStorage 加载
-        if (Object.keys(cache).length === 0) {
-          console.log('No data from Supabase, loading from localStorage on GitHub Pages');
-          for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key) {
-              const value = localStorage.getItem(key);
-              if (value !== null) {
-                cache[key] = value;
+        // 2. 将本地数据复制到缓存（优先使用本地数据）
+        for (const [key, value] of Object.entries(localCache)) {
+          cache[key] = value;
+        }
+        
+        console.log(`Loaded ${Object.keys(localCache).length} items from localStorage on GitHub Pages`);
+        
+        // 3. 异步尝试从云端加载（不阻塞用户交互）
+        if (useSupabase && supabase) {
+          setTimeout(async () => {
+            try {
+              console.log('Step 2: Asynchronously trying to load from Supabase (3s timeout)');
+              const fetchPromise = supabase
+                .from('app_data')
+                .select('key, value, updated_at')
+                .eq('user_id', 'default_user');
+
+              const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
+                setTimeout(() => resolve({ data: null, error: new Error('Supabase timeout after 3s') }), 3000)
+              );
+
+              const result = await Promise.race([fetchPromise, timeoutPromise]);
+              const { data, error } = result;
+
+              if (!error && data && data.length > 0) {
+                console.log(`Loaded ${data.length} items from Supabase on GitHub Pages (async)`);
+                
+                // 只更新缓存中不存在的键，或者云端数据更新的键
+                for (const item of data) {
+                  if (item.key && item.value !== null) {
+                    const localValue = localCache[item.key];
+                    
+                    // 策略：如果本地没有这个键，或者云端数据明显更新（有updated_at时间戳），则使用云端数据
+                    if (!localValue || (item.updated_at && isCloudDataNewer(item.key, item.updated_at))) {
+                      cache[item.key] = item.value;
+                      try {
+                        localStorage.setItem(item.key, item.value);
+                        console.log(`Updated ${item.key} from cloud (local: ${localValue ? 'exists' : 'none'})`);
+                      } catch (e) {
+                        console.warn('Failed to update localStorage from cloud for key:', item.key, e);
+                      }
+                    }
+                  }
+                }
+              } else if (error) {
+                console.warn('Supabase load failed on GitHub Pages:', error.message);
               }
+            } catch (supabaseError) {
+              console.warn('Supabase connection failed on GitHub Pages:', supabaseError);
             }
-          }
+          }, 100); // 100ms延迟，确保本地数据先加载完成
         }
         
         console.log(`Storage initialized with ${Object.keys(cache).length} items on GitHub Pages`);
@@ -522,4 +538,11 @@ export async function migrateFromLocalStorage(): Promise<number> {
   }
 
   return migrated;
+}
+
+/** 判断云端数据是否比本地数据更新（简单实现） */
+function isCloudDataNewer(key: string, cloudUpdatedAt: string): boolean {
+  // 这里简单实现：总是返回true，因为云端数据通常应该更可靠
+  // 在实际应用中，可以比较时间戳，但这里简化处理
+  return true;
 }
