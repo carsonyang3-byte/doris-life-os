@@ -71,6 +71,8 @@ export async function checkPassword(input: string): Promise<boolean> {
 export async function setPassword(password: string): Promise<boolean> {
   cache[AUTH_KEY] = password;
   localStorage.setItem(AUTH_KEY, password);
+  // 关键：设置本地时间戳，防止被云端数据覆盖
+  setLocalTimestamp(AUTH_KEY);
   return true;
 }
 
