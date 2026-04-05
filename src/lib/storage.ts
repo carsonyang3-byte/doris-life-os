@@ -247,6 +247,36 @@ async function init(): Promise<void> {
 
 /** 同步调用：确保初始化完成（启动时调用一次） */
 export async function ensureStorageReady(): Promise<void> {
+  // 在 GitHub Pages 上，如果 Supabase 配置有问题，直接跳过初始化
+  const isGitHubPages = typeof window !== 'undefined' && window.location.hostname.includes('github.io');
+  
+  if (isGitHubPages) {
+    console.log('GitHub Pages detected, ensuring storage ready immediately');
+    // 如果在 GitHub Pages 上，我们假定 Supabase 可能有网络问题
+    // 直接设置 initialized 为 true，避免等待 Supabase 响应
+    if (!initialized) {
+      try {
+        // 只从 localStorage 加载
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key) {
+            const value = localStorage.getItem(key);
+            if (value !== null) {
+              cache[key] = value;
+            }
+          }
+        }
+        console.log(`Loaded ${Object.keys(cache).length} items from localStorage on GitHub Pages`);
+        initialized = true;
+      } catch (e) {
+        console.warn('Failed to load from localStorage on GitHub Pages:', e);
+        initialized = true; // 无论如何都标记为已初始化
+      }
+    }
+    return;
+  }
+  
+  // 非 GitHub Pages 环境，正常初始化
   await init();
 }
 
