@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings Page Test</title>
+</head>
+<body>
+    <h1>Settings Page 测试</h1>
+    <p>当前时间: <span id="time"></span></p>
+    <p>SettingsPage JavaScript 包含检查: 
+        <span id="status">检查中...</span>
+    </p>
+    
+    <script>
+        // 显示当前时间
+        document.getElementById('time').textContent = new Date().toLocaleString();
+        
+        // 检查GitHub Pages是否加载
+        fetch('https://carsonyang3-byte.github.io/doris-life-os/')
+            .then(response => response.text())
+            .then(html => {
+                if (html.includes('Settings') || html.includes('SettingsPage')) {
+                    document.getElementById('status').textContent = '✅ 包含Settings相关代码';
+                    document.getElementById('status').style.color = 'green';
+                } else {
+                    document.getElementById('status').textContent = '❌ 不包含Settings相关代码';
+                    document.getElementById('status').style.color = 'red';
+                }
+            })
+            .catch(error => {
+                document.getElementById('status').textContent = '❌ 无法访问GitHub Pages: ' + error.message;
+                document.getElementById('status').style.color = 'red';
+            });
+    </script>
+</body>
+</html>
