@@ -43,16 +43,35 @@ export async function checkPassword(input: string): Promise<boolean> {
     }
   }
   
+  console.log('=== checkPassword debug ===', { 
+    hasStored: !!stored, 
+    storedType: typeof stored,
+    storedLength: stored?.length,
+    inputLength: input?.length,
+    storedPreview: stored ? `[${stored.substring(0, 3)}...${stored.substring(stored.length - 2)}]` : 'null',
+    inputPreview: input ? `[${input.substring(0, 3)}...${input.substring(input.length - 2)}]` : 'null'
+  });
+  
   if (!stored) return false;
   
   try {
     const parsed = JSON.parse(stored);
+    console.log('=== checkPassword parsed ===', { 
+      isObject: typeof parsed === 'object', 
+      hasPasswordField: !!(parsed && typeof parsed === 'object' && parsed.password)
+    });
     if (parsed && typeof parsed === 'object' && parsed.password) {
-      return parsed.password === input;
+      const match = parsed.password === input;
+      console.log('=== checkPassword result (object path) ===', { match });
+      return match;
     }
-    return String(parsed) === input;
+    const match = String(parsed) === input;
+    console.log('=== checkPassword result (string path) ===', { match });
+    return match;
   } catch {
-    return stored === input;
+    const match = stored === input;
+    console.log('=== checkPassword result (raw path) ===', { match });
+    return match;
   }
 }
 
