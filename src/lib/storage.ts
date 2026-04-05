@@ -351,6 +351,14 @@ export async function refreshFromCloud(): Promise<void> {
           }
         }
       }
+      // 更新最后同步时间
+      const now = new Date().toLocaleString('zh-CN');
+      try {
+        localStorage.setItem('last_sync_time', now);
+        console.log('Updated last_sync_time after refresh to:', now);
+      } catch (e) {
+        console.warn('Failed to update last_sync_time in localStorage:', e);
+      }
     } else if (error) {
       console.warn('Failed to refresh from cloud:', error.message);
     }
@@ -418,6 +426,14 @@ async function syncToCloud(key: string, value: string): Promise<void> {
       console.warn('Failed to sync to Supabase for key:', key, error.message);
     } else {
       console.log('Synced to Supabase for key:', key);
+      // 自动更新最后同步时间
+      const now = new Date().toLocaleString('zh-CN');
+      try {
+        localStorage.setItem('last_sync_time', now);
+        console.log('Updated last_sync_time to:', now);
+      } catch (e) {
+        console.warn('Failed to update last_sync_time in localStorage:', e);
+      }
     }
   } catch (e) {
     console.warn('Supabase sync failed for key:', key, e);
