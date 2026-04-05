@@ -164,8 +164,8 @@ import { createClient } from '@supabase/supabase-js';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
 
-// 暂时禁用 Supabase，使用 localStorage 回退
-const useSupabase = false; // !!(SUPABASE_URL && SUPABASE_KEY);
+// 启用 Supabase 云端同步
+const useSupabase = !!(SUPABASE_URL && SUPABASE_KEY);
 
 if (useSupabase) {
   console.log('Supabase connected:', SUPABASE_URL);
@@ -181,23 +181,58 @@ const supabase = useSupabase ? createClient(SUPABASE_URL!, SUPABASE_KEY!) : null
 const cache: Record<string, string | null> = {};
 let initialized = false;
 
-/** 初始化：从 localStorage 加载数据到内存缓存 */
+/** 初始化：从云端加载数据到内存缓存 */
 async function init(): Promise<void> {
   if (initialized) return;
+  
   try {
-    // 从 localStorage 加载数据
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key) {
-        const value = localStorage.getItem(key);
-        if (value !== null) {
-          cache[key] = value;
+    // 1. 先尝试从云端加载数据
+    if (useSupabase && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('app_data')
+          .select('key, value')
+          .eq('user_id', 'default_user');
+          
+        if (!error && data) {
+          console.log(`Loaded ${data.length} items from Supabase`);
+          for (const item of data) {
+            if (item.key && item.value !== null) {
+              cache[item.key] = item.value;
+              // 同时更新 localStorage 作为备份
+              try {
+                localStorage.setItem(item.key, item.value);
+              } catch (e) {
+                console.warn('Failed to update localStorage for key:', item.key, e);
+              }
+            }
+          }
+        } else if (error) {
+          console.warn('Supabase load failed, using localStorage:', error.message);
+        }
+      } catch (supabaseError) {
+        console.warn('Supabase connection failed, falling back to localStorage:', supabaseError);
+      }
+    }
+    
+    // 2. 如果云端没有或失败，从 localStorage 加载
+    if (Object.keys(cache).length === 0) {
+      console.log('No data from Supabase, loading from localStorage');
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key) {
+          const value = localStorage.getItem(key);
+          if (value !== null) {
+            cache[key] = value;
+          }
         }
       }
     }
+    
     initialized = true;
+    console.log(`Storage initialized with ${Object.keys(cache).length} items`);
   } catch (e) {
-    console.warn('LocalStorage init failed:', e);
+    console.warn('Storage init failed:', e);
     initialized = true; // 避免反复重试
   }
 }
@@ -212,19 +247,140 @@ export function getItem(key: string): string | null {
   return cache[key] ?? null;
 }
 
-/** 设置数据（同步写缓存 + localStorage） */
+/** 从云端刷新数据（用于手动同步） */
+export async function refreshFromCloud(): Promise<void> {
+  if (!useSupabase || !supabase) {
+    console.log('Supabase not configured, cannot refresh from cloud');
+    return;
+  }
+  
+  try {
+    const { data, error } = await supabase
+      .from('app_data')
+      .select('key, value')
+      .eq('user_id', 'default_user');
+      
+    if (!error && data) {
+      console.log(`Refreshed ${data.length} items from cloud`);
+      for (const item of data) {
+        if (item.key && item.value !== null) {
+          cache[item.key] = item.value;
+          // 更新 localStorage
+          try {
+            localStorage.setItem(item.key, item.value);
+          } catch (e) {
+            console.warn('Failed to update localStorage for key:', item.key, e);
+          }
+        }
+      }
+    } else if (error) {
+      console.warn('Failed to refresh from cloud:', error.message);
+    }
+  } catch (e) {
+    console.warn('Refresh from cloud failed:', e);
+  }
+}
+
+/** 导出所有数据为 JSON（用于备份或迁移） */
+export async function exportAllData(): Promise<Record<string, string>> {
+  // 优先从缓存获取最新数据
+  return { ...cache };
+}
+
+/** 导入数据（用于恢复或迁移） */
+export async function importData(data: Record<string, string>): Promise<number> {
+  let imported = 0;
+  
+  for (const [key, value] of Object.entries(data)) {
+    if (key && value !== undefined) {
+      setItem(key, value); // 同步调用，后台异步同步到云端
+      imported++;
+    }
+  }
+  
+  console.log(`Imported ${imported} items from backup`);
+  return imported;
+}
+
+/** 设置数据（同步写缓存 + localStorage，异步同步到云端） */
 export function setItem(key: string, value: string): void {
   cache[key] = value;
-  // 同步写 localStorage 作为备用
-  try { localStorage.setItem(key, value); } catch {}
-  // 暂时禁用 Supabase 写入
+  
+  // 1. 同步写 localStorage 作为备份
+  try { 
+    localStorage.setItem(key, value); 
+  } catch (e) {
+    console.warn('Failed to write to localStorage for key:', key, e);
+  }
+  
+  // 2. 异步同步到云端（不阻塞UI）
+  syncToCloud(key, value).catch(error => {
+    console.warn('Background sync failed for key:', key, error);
+  });
+}
+
+/** 异步同步到云端（后台任务） */
+async function syncToCloud(key: string, value: string): Promise<void> {
+  if (!useSupabase || !supabase) return;
+  
+  try {
+    const { error } = await supabase
+      .from('app_data')
+      .upsert({
+        user_id: 'default_user',
+        key,
+        value,
+        updated_at: new Date().toISOString()
+      }, {
+        onConflict: 'user_id,key'
+      });
+      
+    if (error) {
+      console.warn('Failed to sync to Supabase for key:', key, error.message);
+    } else {
+      console.log('Synced to Supabase for key:', key);
+    }
+  } catch (e) {
+    console.warn('Supabase sync failed for key:', key, e);
+  }
 }
 
 /** 删除数据 */
 export function removeItem(key: string): void {
   delete cache[key];
-  try { localStorage.removeItem(key); } catch {}
-  // 暂时禁用 Supabase 删除
+  
+  // 1. 删除 localStorage 备份
+  try { 
+    localStorage.removeItem(key); 
+  } catch (e) {
+    console.warn('Failed to remove from localStorage for key:', key, e);
+  }
+  
+  // 2. 异步从云端删除（不阻塞UI）
+  deleteFromCloud(key).catch(error => {
+    console.warn('Background delete failed for key:', key, error);
+  });
+}
+
+/** 异步从云端删除（后台任务） */
+async function deleteFromCloud(key: string): Promise<void> {
+  if (!useSupabase || !supabase) return;
+  
+  try {
+    const { error } = await supabase
+      .from('app_data')
+      .delete()
+      .eq('user_id', 'default_user')
+      .eq('key', key);
+      
+    if (error) {
+      console.warn('Failed to delete from Supabase for key:', key, error.message);
+    } else {
+      console.log('Deleted from Supabase for key:', key);
+    }
+  } catch (e) {
+    console.warn('Supabase delete failed for key:', key, e);
+  }
 }
 
 /** 迁移 localStorage 数据到缓存（首次使用时调用） */

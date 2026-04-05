@@ -8,6 +8,7 @@ const NAV_ITEMS: { page: PageType; label: string }[] = [
   { page: 'journal', label: 'Journal' },
   { page: 'travel', label: 'Travel' },
   { page: 'money', label: 'Money' },
+  { page: 'settings', label: 'Settings' },
 ];
 
 interface LayoutProps {

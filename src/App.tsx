@@ -8,6 +8,7 @@ import LibraryPage from './pages/LibraryPage';
 import MoneyPage from './pages/MoneyPage';
 import JournalPage from './pages/JournalPage';
 import TravelPage from './pages/TravelPage';
+import SettingsPage from './pages/SettingsPage';
 import type { PageType } from './types';
 import { formatDateCN } from './lib/utils';
 import {
@@ -84,6 +85,7 @@ function App() {
       {activePage === 'money' && <MoneyPage />}
       {activePage === 'journal' && <JournalPage />}
       {activePage === 'travel' && <TravelPage />}
+      {activePage === 'settings' && <SettingsPage />}
     </Layout>
   );
 }
