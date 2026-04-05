@@ -1,5 +1,6 @@
 const AUTH_KEY = '__auth_password__';
 const SESSION_KEY = '__auth_session__';
+const LOCAL_TS_PREFIX = '__local_ts_'; // 本地修改时间戳前缀
 
 // 内存缓存，避免每次都请求 Supabase
 const cache: Record<string, string | null> = {};
@@ -12,96 +13,46 @@ const cache: Record<string, string | null> = {};
 
 /** 检查是否已设置密码（需要等 storage 初始化完成） */
 export function isPasswordSet(): boolean {
-  console.log('isPasswordSet called');
-  console.log('AUTH_KEY:', AUTH_KEY);
-  console.log('cache[AUTH_KEY]:', cache[AUTH_KEY]);
+  if (cache[AUTH_KEY]) return true;
   
-  // 先检查缓存
-  if (cache[AUTH_KEY]) {
-    console.log('Password found in cache');
-    return true;
-  }
-  
-  // 如果没有在缓存中，检查 localStorage
   try {
-    console.log('Checking localStorage for key:', AUTH_KEY);
     const stored = localStorage.getItem(AUTH_KEY);
-    console.log('localStorage.getItem result:', stored);
     if (stored) {
-      cache[AUTH_KEY] = stored; // 更新缓存
-      console.log('Updated cache, password is set');
+      cache[AUTH_KEY] = stored;
       return true;
-    } else {
-      console.log('No password found in localStorage');
     }
   } catch (e) {
     console.warn('LocalStorage read in isPasswordSet failed:', e);
   }
   
-  console.log('Password not set');
   return false;
 }
 
 /** 验证密码是否正确 */
 export async function checkPassword(input: string): Promise<boolean> {
-  console.log('checkPassword called with input:', input);
-  console.log('AUTH_KEY:', AUTH_KEY);
-  console.log('cache[AUTH_KEY]:', cache[AUTH_KEY]);
-  
-  // 先从缓存读取
   let stored = cache[AUTH_KEY];
   
-  // 如果缓存没有，尝试从 localStorage 读取
   if (!stored) {
     try {
-      console.log('Checking localStorage for key:', AUTH_KEY);
       stored = localStorage.getItem(AUTH_KEY);
-      console.log('localStorage.getItem result:', stored);
       if (stored) {
         cache[AUTH_KEY] = stored;
-        console.log('Updated cache with localStorage value');
       }
     } catch (e) {
       console.warn('LocalStorage read failed:', e);
     }
   }
   
-  if (!stored) {
-    console.log('No password found in cache or localStorage');
-    // 检查 localStorage 中所有键
-    try {
-      console.log('All localStorage keys:');
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        console.log(`  ${key}: ${localStorage.getItem(key)?.substring(0, 20)}...`);
-      }
-    } catch (e) {
-      console.log('Cannot list localStorage:', e);
-    }
-    return false;
-  }
+  if (!stored) return false;
   
-  console.log('Checking password, stored value:', stored, 'input:', input);
-  
-  // 存储的可能是纯字符串密码，也可能是旧版 JSON 格式
   try {
     const parsed = JSON.parse(stored);
-    console.log('Parsed as JSON:', parsed);
-    // 检查是否是旧版格式 { password: "xxx" }
     if (parsed && typeof parsed === 'object' && parsed.password) {
-      const match = parsed.password === input;
-      console.log('Compared JSON password, match:', match);
-      return match;
+      return parsed.password === input;
     }
-    // 如果不是标准格式，尝试直接比较
-    const match = String(parsed) === input;
-    console.log('Compared as stringified JSON, match:', match);
-    return match;
+    return String(parsed) === input;
   } catch {
-    // 不是 JSON，直接当字符串比较
-    const match = stored === input;
-    console.log('Compared as strings, match:', match);
-    return match;
+    return stored === input;
   }
 }
 
@@ -118,13 +69,10 @@ export function setSession(): void {
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.setItem(SESSION_KEY, Date.now().toString());
     } else {
-      console.warn('sessionStorage is not available, using memory session');
-      // 在内存中模拟 session
       cache[SESSION_KEY] = Date.now().toString();
     }
   } catch (e) {
     console.warn('Failed to set session:', e);
-    // 即使 sessionStorage 失败，也继续
   }
 }
 
@@ -132,10 +80,8 @@ export function hasSession(): boolean {
   try {
     if (typeof sessionStorage !== 'undefined') {
       return !!sessionStorage.getItem(SESSION_KEY);
-    } else {
-      // 检查内存中的 session
-      return !!cache[SESSION_KEY];
     }
+    return !!cache[SESSION_KEY];
   } catch (e) {
     console.warn('Failed to check session:', e);
     return false;
@@ -148,7 +94,6 @@ export function clearSession(): void {
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.removeItem(SESSION_KEY);
     }
-    // 同时清除内存中的 session
     delete cache[SESSION_KEY];
   } catch (e) {
     console.warn('Failed to clear session:', e);
@@ -158,8 +103,11 @@ export function clearSession(): void {
 /**
  * 统一存储层 — localStorage ↔ Supabase
  *
- * 所有 hook 通过 getItem / setItem / removeItem 操作数据，
- * 底层自动同步到 Supabase，实现多设备数据一致。
+ * 同步策略：
+ * - 启动时：先加载 localStorage（立即可用），再异步从云端合并
+ * - 写入时：同步写本地 + 异步推送云端（带时间戳）
+ * - 冲突解决：last-write-wins based on updated_at timestamp
+ * - 云端数据只在 updated_at 更新于本地修改时间时才覆盖本地
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -167,90 +115,143 @@ import { createClient } from '@supabase/supabase-js';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
 
-// 检测是否在 GitHub Pages 上运行
-const isGitHubPagesEnv = typeof window !== 'undefined' && window.location.hostname.includes('github.io');
-
-// 启用 Supabase 云端同步（GitHub Pages 上禁用，避免数据覆盖问题）
-const useSupabase = !!(SUPABASE_URL && SUPABASE_KEY) && !isGitHubPagesEnv;
+// 始终启用 Supabase（除非环境变量没配置）
+const useSupabase = !!(SUPABASE_URL && SUPABASE_KEY);
 
 if (useSupabase) {
   console.log('Supabase connected:', SUPABASE_URL);
 } else {
-  console.warn('Supabase not configured, using localStorage fallback');
+  console.warn('Supabase not configured, using localStorage only');
 }
 
 const supabase = useSupabase ? createClient(SUPABASE_URL!, SUPABASE_KEY!) : null;
 
-
-
 let initialized = false;
 
-/** 初始化：从云端加载数据到内存缓存 */
+/** 获取某个 key 的本地修改时间戳 */
+function getLocalTimestamp(key: string): string | null {
+  try {
+    return localStorage.getItem(LOCAL_TS_PREFIX + key);
+  } catch {
+    return null;
+  }
+}
+
+/** 设置某个 key 的本地修改时间戳 */
+function setLocalTimestamp(key: string): void {
+  try {
+    localStorage.setItem(LOCAL_TS_PREFIX + key, new Date().toISOString());
+  } catch {
+    // ignore
+  }
+}
+
+/** 初始化：先加载 localStorage（立即可用），再异步合并云端数据 */
 async function init(): Promise<void> {
   if (initialized) return;
   
   try {
-    // 1. 先尝试从云端加载数据（5秒超时，避免网络问题导致永久卡住）
+    // 第一步：始终先从 localStorage 加载到缓存（确保页面立即可用）
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && !key.startsWith('__')) { // 跳过内部键和时间戳
+        const value = localStorage.getItem(key);
+        if (value !== null) {
+          cache[key] = value;
+        }
+      }
+    }
+    
+    initialized = true; // 标记为已初始化，让应用可以开始工作
+    console.log(`Storage initialized with ${Object.keys(cache).length} items from localStorage`);
+    
+    // 第二步：异步从云端拉取并智能合并（不阻塞 UI）
     if (useSupabase && supabase) {
-      try {
-        const fetchPromise = supabase
-          .from('app_data')
-          .select('key, value')
-          .eq('user_id', 'default_user');
-
-        const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
-          setTimeout(() => resolve({ data: null, error: new Error('Supabase timeout after 5s') }), 5000)
-        );
-
-        const result = await Promise.race([fetchPromise, timeoutPromise]);
-        const { data, error } = result;
-
-        if (!error && data) {
-          console.log(`Loaded ${data.length} items from Supabase`);
-          for (const item of data) {
-            if (item.key && item.value !== null) {
-              cache[item.key] = item.value;
-              // 同时更新 localStorage 作为备份
-              try {
-                localStorage.setItem(item.key, item.value);
-              } catch (e) {
-                console.warn('Failed to update localStorage for key:', item.key, e);
-              }
-            }
-          }
-        } else if (error) {
-          console.warn('Supabase load failed, using localStorage:', error.message);
-        }
-      } catch (supabaseError) {
-        console.warn('Supabase connection failed, falling back to localStorage:', supabaseError);
-      }
+      mergeFromCloudAsync();
     }
-    
-    // 2. 如果云端没有或失败，从 localStorage 加载
-    if (Object.keys(cache).length === 0) {
-      console.log('No data from Supabase, loading from localStorage');
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key) {
-          const value = localStorage.getItem(key);
-          if (value !== null) {
-            cache[key] = value;
-          }
-        }
-      }
-    }
-    
-    initialized = true;
-    console.log(`Storage initialized with ${Object.keys(cache).length} items`);
   } catch (e) {
     console.warn('Storage init failed:', e);
-    initialized = true; // 避免反复重试
+    initialized = true;
   }
 }
 
-/** 同步调用：确保初始化完成（启动时调用一次） */
+/** 异步从云端合并数据（后台任务） */
+async function mergeFromCloudAsync(): Promise<void> {
+  try {
+    console.log('Starting async cloud merge...');
+    
+    const fetchPromise = supabase!
+      .from('app_data')
+      .select('key, value, updated_at')
+      .eq('user_id', 'default_user');
+
+    const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: new Error('Cloud merge timeout after 5s') }), 5000)
+    );
+
+    const result = await Promise.race([fetchPromise, timeoutPromise]);
+    const { data, error } = result;
+
+    if (error || !data) {
+      console.warn('Cloud merge failed:', error?.message);
+      return;
+    }
+
+    console.log(`Cloud merge: received ${data.length} items`);
+    
+    let mergedCount = 0;
+    let skippedCount = 0;
+
+    for (const item of data) {
+      if (!item.key || item.value === null) continue;
+      
+      const localTs = getLocalTimestamp(item.key);
+      const cloudTs = item.updated_at;
+      
+      let shouldUseCloudData = false;
+      
+      if (!localTs) {
+        // 本地没有这个 key 的修改记录，说明是从其他设备创建的 → 用云端的
+        shouldUseCloudData = true;
+      } else if (cloudTs && cloudTs > localTs) {
+        // 云端的时间戳比本地更新 → 用云端的
+        shouldUseCloudData = true;
+      }
+      // 否则：本地数据更新或相同 → 保持本地不变
+      
+      if (shouldUseCloudData) {
+        cache[item.key] = item.value;
+        try {
+          localStorage.setItem(item.key, item.value);
+          // 同步更新本地时间戳为云端时间戳，防止下次又覆盖回来
+          if (cloudTs) {
+            localStorage.setItem(LOCAL_TS_PREFIX + item.key, cloudTs);
+          }
+          mergedCount++;
+        } catch (e) {
+          console.warn('Failed to write cloud data to localStorage for key:', item.key, e);
+        }
+      } else {
+        skippedCount++;
+      }
+    }
+
+    console.log(`Cloud merge complete: ${mergedCount} merged, ${skippedCount} skipped (local is newer)`);
+    
+    // 更新最后同步时间
+    if (data.length > 0) {
+      const now = new Date().toLocaleString('zh-CN');
+      try {
+        localStorage.setItem('last_sync_time', now);
+      } catch {}
+    }
+  } catch (e) {
+    console.warn('Cloud merge exception:', e);
+  }
+}
+
+/** 确保初始化完成 */
 export async function ensureStorageReady(): Promise<void> {
-  // GitHub Pages 上也使用标准初始化流程（Supabase 已在上面禁用）
   await init();
 }
 
@@ -259,118 +260,120 @@ export function getItem(key: string): string | null {
   return cache[key] ?? null;
 }
 
-/** 从云端刷新数据（用于手动同步） */
+/** 从云端刷新数据（手动触发，强制以云端为准） */
 export async function refreshFromCloud(): Promise<void> {
   if (!useSupabase || !supabase) {
-    console.log('Supabase not configured, cannot refresh from cloud');
+    console.log('Supabase not configured, cannot refresh');
     return;
   }
   
   try {
     const { data, error } = await supabase
       .from('app_data')
-      .select('key, value')
+      .select('key, value, updated_at')
       .eq('user_id', 'default_user');
-      
-    if (!error && data) {
-      console.log(`Refreshed ${data.length} items from cloud`);
-      for (const item of data) {
-        if (item.key && item.value !== null) {
-          cache[item.key] = item.value;
-          // 更新 localStorage
-          try {
-            localStorage.setItem(item.key, item.value);
-          } catch (e) {
-            console.warn('Failed to update localStorage for key:', item.key, e);
+    
+    if (error || !data) {
+      console.warn('Refresh from cloud failed:', error?.message);
+      return;
+    }
+
+    console.log(`Manual refresh: ${data.length} items from cloud`);
+    
+    for (const item of data) {
+      if (item.key && item.value !== null) {
+        cache[item.key] = item.value;
+        try {
+          localStorage.setItem(item.key, item.value);
+          if (item.updated_at) {
+            localStorage.setItem(LOCAL_TS_PREFIX + item.key, item.updated_at);
           }
+        } catch (e) {
+          console.warn('Failed to update localStorage:', e);
         }
       }
-      // 更新最后同步时间
-      const now = new Date().toLocaleString('zh-CN');
-      try {
-        localStorage.setItem('last_sync_time', now);
-        console.log('Updated last_sync_time after refresh to:', now);
-      } catch (e) {
-        console.warn('Failed to update last_sync_time in localStorage:', e);
-      }
-    } else if (error) {
-      console.warn('Failed to refresh from cloud:', error.message);
     }
+
+    const now = new Date().toLocaleString('zh-CN');
+    try {
+      localStorage.setItem('last_sync_time', now);
+    } catch {}
   } catch (e) {
-    console.warn('Refresh from cloud failed:', e);
+    console.warn('Refresh exception:', e);
   }
 }
 
-/** 导出所有数据为 JSON（用于备份或迁移） */
+/** 导出所有数据 */
 export async function exportAllData(): Promise<Record<string, string>> {
-  // 优先从缓存获取最新数据
   return { ...cache };
 }
 
-/** 导入数据（用于恢复或迁移） */
+/** 导入数据 */
 export async function importData(data: Record<string, string>): Promise<number> {
   let imported = 0;
-  
   for (const [key, value] of Object.entries(data)) {
     if (key && value !== undefined) {
-      setItem(key, value); // 同步调用，后台异步同步到云端
+      setItem(key, value);
       imported++;
     }
   }
-  
-  console.log(`Imported ${imported} items from backup`);
   return imported;
 }
 
-/** 设置数据（同步写缓存 + localStorage，异步同步到云端） */
+/** 设置数据（同步写本地，异步推送云端） */
 export function setItem(key: string, value: string): void {
   cache[key] = value;
   
-  // 1. 同步写 localStorage 作为备份
+  // 1. 同步写 localStorage
   try { 
     localStorage.setItem(key, value); 
   } catch (e) {
     console.warn('Failed to write to localStorage for key:', key, e);
   }
   
-  // 2. 异步同步到云端（不阻塞UI）
+  // 2. 记录本地修改时间戳
+  setLocalTimestamp(key);
+  
+  // 3. 异步推送到云端（不阻塞UI）
   syncToCloud(key, value).catch(error => {
     console.warn('Background sync failed for key:', key, error);
   });
 }
 
-/** 异步同步到云端（后台任务） */
+/** 推送到云端 */
 async function syncToCloud(key: string, value: string): Promise<void> {
   if (!useSupabase || !supabase) return;
 
   try {
-    // 在 GitHub Pages 上，也尝试同步到云端
+    const now = new Date().toISOString();
     const { error } = await supabase
       .from('app_data')
       .upsert({
         user_id: 'default_user',
         key,
         value,
-        updated_at: new Date().toISOString()
+        updated_at: now
       }, {
         onConflict: 'user_id,key'
       });
       
     if (error) {
-      console.warn('Failed to sync to Supabase for key:', key, error.message);
+      console.warn('Sync to cloud failed for key:', key, error.message);
     } else {
-      console.log('Synced to Supabase for key:', key);
-      // 自动更新最后同步时间
-      const now = new Date().toLocaleString('zh-CN');
+      // 同步成功后，更新本地时间戳为云端一致的时间
       try {
-        localStorage.setItem('last_sync_time', now);
-        console.log('Updated last_sync_time to:', now);
-      } catch (e) {
-        console.warn('Failed to update last_sync_time in localStorage:', e);
-      }
+        localStorage.setItem(LOCAL_TS_PREFIX + key, now);
+      } catch {}
+      console.log('Synced to cloud:', key);
+      
+      // 更新最后同步时间
+      const timeStr = new Date().toLocaleString('zh-CN');
+      try {
+        localStorage.setItem('last_sync_time', timeStr);
+      } catch {}
     }
   } catch (e) {
-    console.warn('Supabase sync failed for key:', key, e);
+    console.warn('Sync to cloud exception for key:', key, e);
   }
 }
 
@@ -378,20 +381,19 @@ async function syncToCloud(key: string, value: string): Promise<void> {
 export function removeItem(key: string): void {
   delete cache[key];
   
-  // 1. 删除 localStorage 备份
   try { 
-    localStorage.removeItem(key); 
+    localStorage.removeItem(key);
+    localStorage.removeItem(LOCAL_TS_PREFIX + key);
   } catch (e) {
     console.warn('Failed to remove from localStorage for key:', key, e);
   }
   
-  // 2. 异步从云端删除（不阻塞UI）
   deleteFromCloud(key).catch(error => {
     console.warn('Background delete failed for key:', key, error);
   });
 }
 
-/** 异步从云端删除（后台任务） */
+/** 从云端删除 */
 async function deleteFromCloud(key: string): Promise<void> {
   if (!useSupabase || !supabase) return;
   
@@ -401,18 +403,18 @@ async function deleteFromCloud(key: string): Promise<void> {
       .delete()
       .eq('user_id', 'default_user')
       .eq('key', key);
-      
+    
     if (error) {
-      console.warn('Failed to delete from Supabase for key:', key, error.message);
+      console.warn('Delete from cloud failed for key:', key, error.message);
     } else {
-      console.log('Deleted from Supabase for key:', key);
+      console.log('Deleted from cloud:', key);
     }
   } catch (e) {
-    console.warn('Supabase delete failed for key:', key, e);
+    console.warn('Delete from cloud exception for key:', key, e);
   }
 }
 
-/** 迁移 localStorage 数据到缓存（首次使用时调用） */
+/** 迁移旧版 localStorage 数据到缓存（首次使用时调用） */
 export async function migrateFromLocalStorage(): Promise<number> {
   const keysToMigrate = [
     'life-os-habits',
@@ -438,7 +440,7 @@ export async function migrateFromLocalStorage(): Promise<number> {
     }
   }
 
-  // 迁移所有 localStorage 中 life-os-today- 和 life-os-awareness- 的 key
+  // 迁移所有 life-os-today- 和 life-os-awareness- 的 key
   const allKeys: string[] = [];
   for (let i = 0; i < localStorage.length; i++) {
     const k = localStorage.key(i);
@@ -456,11 +458,4 @@ export async function migrateFromLocalStorage(): Promise<number> {
   }
 
   return migrated;
-}
-
-/** 判断云端数据是否比本地数据更新（简单实现） */
-function isCloudDataNewer(key: string, cloudUpdatedAt: string): boolean {
-  // 这里简单实现：总是返回true，因为云端数据通常应该更可靠
-  // 在实际应用中，可以比较时间戳，但这里简化处理
-  return true;
 }
