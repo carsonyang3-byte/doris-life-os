@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { SyncManager } from '@/components/SyncManager';
@@ -11,13 +11,11 @@ export default function SettingsPage() {
     lastSync: localStorage.getItem('last_sync_time') || '从未同步'
   });
 
-  useEffect(() => {
-    // 计算本地存储数据量
+  const refreshStorageInfo = useCallback(() => {
     const count = Object.keys(localStorage).filter(
       key => key.startsWith('life-os-') || key.startsWith('doris_')
     ).length;
     
-    // 检查 Supabase 是否配置
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
     const supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
     const supabaseConfigured = !!(supabaseUrl && supabaseKey);
@@ -29,6 +27,13 @@ export default function SettingsPage() {
     });
   }, []);
 
+  useEffect(() => {
+    refreshStorageInfo();
+    // 每5秒刷新一次，确保同步时间能及时更新
+    const timer = setInterval(refreshStorageInfo, 5000);
+    return () => clearInterval(timer);
+  }, [refreshStorageInfo]);
+
   const handleLogout = () => {
     if (window.confirm('确定要退出登录吗？退出后需要重新输入密码才能访问。')) {
       clearSession();
@@ -38,7 +43,6 @@ export default function SettingsPage() {
 
   const handleClearCache = () => {
     if (window.confirm('确定要清除本地缓存吗？云端数据不会受影响，但清除后需要重新从云端同步。')) {
-      // 只清除应用相关数据，保留密码等
       const keysToKeep = ['__auth_password__', 'last_sync_time'];
       const keysToRemove = Object.keys(localStorage).filter(
         key => (key.startsWith('life-os-') || key.startsWith('doris_')) && !keysToKeep.includes(key)
@@ -50,6 +54,9 @@ export default function SettingsPage() {
       window.location.reload();
     }
   };
+
+  // 暴露给 SyncManager 的回调，同步完成后刷新状态
+  (window as unknown as { __refreshSettings?: () => void }).__refreshSettings = refreshStorageInfo;
 
   return (
     <div className="space-y-6">

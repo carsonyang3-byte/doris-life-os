@@ -38,6 +38,8 @@ export function SyncManager() {
         lastSync: now,
         isSyncing: false 
       }));
+      // 通知父组件刷新
+      (window as unknown as { __refreshSettings?: () => void })?.__refreshSettings?.();
     } catch (error) {
       setStatus(prev => ({ 
         ...prev, 

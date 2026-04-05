@@ -178,9 +178,17 @@ async function init(): Promise<void> {
 /** 异步从云端合并数据（后台任务） */
 async function mergeFromCloudAsync(): Promise<void> {
   try {
-    console.log('Starting async cloud merge...');
+    console.log('=== Starting async cloud merge... ===');
+    console.log('useSupabase:', useSupabase, 'supabase exists:', !!supabase);
     
-    const fetchPromise = supabase!
+    if (!supabase) {
+      console.warn('mergeFromCloudAsync: supabase client is null!');
+      return;
+    }
+    
+    console.log('=== Sending request to Supabase ===');
+    
+    const fetchPromise = supabase
       .from('app_data')
       .select('key, value, updated_at')
       .eq('user_id', 'default_user');
@@ -191,6 +199,8 @@ async function mergeFromCloudAsync(): Promise<void> {
 
     const result = await Promise.race([fetchPromise, timeoutPromise]);
     const { data, error } = result;
+
+    console.log('=== Supabase response ===', { error: error?.message, dataCount: data?.length });
 
     if (error || !data) {
       console.warn('Cloud merge failed:', error?.message);
