@@ -1,6 +1,9 @@
 const AUTH_KEY = '__auth_password__';
 const SESSION_KEY = '__auth_session__';
 
+// 内存缓存，避免每次都请求 Supabase
+const cache: Record<string, string | null> = {};
+
 /**
  * 密码管理
  * 密码存在 Supabase app_data 表中，key 为 AUTH_KEY
@@ -177,8 +180,6 @@ const supabase = useSupabase ? createClient(SUPABASE_URL!, SUPABASE_KEY!) : null
 
 
 
-// 内存缓存，避免每次都请求 Supabase
-const cache: Record<string, string | null> = {};
 let initialized = false;
 
 /** 初始化：从云端加载数据到内存缓存 */
