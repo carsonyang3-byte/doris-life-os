@@ -167,8 +167,11 @@ import { createClient } from '@supabase/supabase-js';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
 
-// 启用 Supabase 云端同步
-const useSupabase = !!(SUPABASE_URL && SUPABASE_KEY);
+// 检测是否在 GitHub Pages 上运行
+const isGitHubPagesEnv = typeof window !== 'undefined' && window.location.hostname.includes('github.io');
+
+// 启用 Supabase 云端同步（GitHub Pages 上禁用，避免数据覆盖问题）
+const useSupabase = !!(SUPABASE_URL && SUPABASE_KEY) && !isGitHubPagesEnv;
 
 if (useSupabase) {
   console.log('Supabase connected:', SUPABASE_URL);
@@ -247,92 +250,7 @@ async function init(): Promise<void> {
 
 /** 同步调用：确保初始化完成（启动时调用一次） */
 export async function ensureStorageReady(): Promise<void> {
-  // 在 GitHub Pages 上，也尝试从云端加载数据
-  // 但设置一个较短的超时时间，避免网络问题导致页面卡住
-  const isGitHubPages = typeof window !== 'undefined' && window.location.hostname.includes('github.io');
-  
-  if (isGitHubPages) {
-    console.log('GitHub Pages detected, using improved initialization flow');
-    
-    if (!initialized) {
-      try {
-        console.log('Step 1: First load from localStorage for instant response');
-        // 1. 先快速从 localStorage 加载（确保用户立即看到自己的数据）
-        const localCache: Record<string, string> = {};
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (key && !key.startsWith('__')) { // 跳过内部键
-            const value = localStorage.getItem(key);
-            if (value !== null) {
-              localCache[key] = value;
-            }
-          }
-        }
-        
-        // 2. 将本地数据复制到缓存（优先使用本地数据）
-        for (const [key, value] of Object.entries(localCache)) {
-          cache[key] = value;
-        }
-        
-        console.log(`Loaded ${Object.keys(localCache).length} items from localStorage on GitHub Pages`);
-        
-        // 3. 异步尝试从云端加载（不阻塞用户交互）
-        if (useSupabase && supabase) {
-          setTimeout(async () => {
-            try {
-              console.log('Step 2: Asynchronously trying to load from Supabase (3s timeout)');
-              const fetchPromise = supabase
-                .from('app_data')
-                .select('key, value, updated_at')
-                .eq('user_id', 'default_user');
-
-              const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
-                setTimeout(() => resolve({ data: null, error: new Error('Supabase timeout after 3s') }), 3000)
-              );
-
-              const result = await Promise.race([fetchPromise, timeoutPromise]);
-              const { data, error } = result;
-
-              if (!error && data && data.length > 0) {
-                console.log(`Loaded ${data.length} items from Supabase on GitHub Pages (async)`);
-                
-                // 只更新缓存中不存在的键，或者云端数据更新的键
-                for (const item of data) {
-                  if (item.key && item.value !== null) {
-                    const localValue = localCache[item.key];
-                    
-                    // 策略：如果本地没有这个键，或者云端数据明显更新（有updated_at时间戳），则使用云端数据
-                    if (!localValue || (item.updated_at && isCloudDataNewer(item.key, item.updated_at))) {
-                      cache[item.key] = item.value;
-                      try {
-                        localStorage.setItem(item.key, item.value);
-                        console.log(`Updated ${item.key} from cloud (local: ${localValue ? 'exists' : 'none'})`);
-                      } catch (e) {
-                        console.warn('Failed to update localStorage from cloud for key:', item.key, e);
-                      }
-                    }
-                  }
-                }
-              } else if (error) {
-                console.warn('Supabase load failed on GitHub Pages:', error.message);
-              }
-            } catch (supabaseError) {
-              console.warn('Supabase connection failed on GitHub Pages:', supabaseError);
-            }
-          }, 100); // 100ms延迟，确保本地数据先加载完成
-        }
-        
-        console.log(`Storage initialized with ${Object.keys(cache).length} items on GitHub Pages`);
-        initialized = true;
-      } catch (e) {
-        console.warn('Storage init failed on GitHub Pages:', e);
-        initialized = true; // 避免反复重试
-      }
-    }
-    return;
-  }
-  
-  // 非 GitHub Pages 环境，正常初始化
+  // GitHub Pages 上也使用标准初始化流程（Supabase 已在上面禁用）
   await init();
 }
 
