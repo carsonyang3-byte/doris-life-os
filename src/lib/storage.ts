@@ -187,14 +187,21 @@ async function init(): Promise<void> {
   if (initialized) return;
   
   try {
-    // 1. 先尝试从云端加载数据
+    // 1. 先尝试从云端加载数据（5秒超时，避免网络问题导致永久卡住）
     if (useSupabase && supabase) {
       try {
-        const { data, error } = await supabase
+        const fetchPromise = supabase
           .from('app_data')
           .select('key, value')
           .eq('user_id', 'default_user');
-          
+
+        const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
+          setTimeout(() => resolve({ data: null, error: new Error('Supabase timeout after 5s') }), 5000)
+        );
+
+        const result = await Promise.race([fetchPromise, timeoutPromise]);
+        const { data, error } = result;
+
         if (!error && data) {
           console.log(`Loaded ${data.length} items from Supabase`);
           for (const item of data) {
