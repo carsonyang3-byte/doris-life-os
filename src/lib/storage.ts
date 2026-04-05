@@ -247,30 +247,70 @@ async function init(): Promise<void> {
 
 /** 同步调用：确保初始化完成（启动时调用一次） */
 export async function ensureStorageReady(): Promise<void> {
-  // 在 GitHub Pages 上，如果 Supabase 配置有问题，直接跳过初始化
+  // 在 GitHub Pages 上，也尝试从云端加载数据
+  // 但设置一个较短的超时时间，避免网络问题导致页面卡住
   const isGitHubPages = typeof window !== 'undefined' && window.location.hostname.includes('github.io');
   
   if (isGitHubPages) {
-    console.log('GitHub Pages detected, ensuring storage ready immediately');
-    // 如果在 GitHub Pages 上，我们假定 Supabase 可能有网络问题
-    // 直接设置 initialized 为 true，避免等待 Supabase 响应
+    console.log('GitHub Pages detected, trying to load from Supabase with shorter timeout');
+    
     if (!initialized) {
       try {
-        // 只从 localStorage 加载
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (key) {
-            const value = localStorage.getItem(key);
-            if (value !== null) {
-              cache[key] = value;
+        // 尝试从云端加载，但设置更短的超时（3秒）
+        if (useSupabase && supabase) {
+          try {
+            const fetchPromise = supabase
+              .from('app_data')
+              .select('key, value')
+              .eq('user_id', 'default_user');
+
+            const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
+              setTimeout(() => resolve({ data: null, error: new Error('Supabase timeout after 3s') }), 3000)
+            );
+
+            const result = await Promise.race([fetchPromise, timeoutPromise]);
+            const { data, error } = result;
+
+            if (!error && data && data.length > 0) {
+              console.log(`Loaded ${data.length} items from Supabase on GitHub Pages`);
+              for (const item of data) {
+                if (item.key && item.value !== null) {
+                  cache[item.key] = item.value;
+                  // 同时更新 localStorage 作为备份
+                  try {
+                    localStorage.setItem(item.key, item.value);
+                  } catch (e) {
+                    console.warn('Failed to update localStorage for key:', item.key, e);
+                  }
+                }
+              }
+            } else if (error) {
+              console.warn('Supabase load failed on GitHub Pages, falling back to localStorage:', error.message);
+            }
+          } catch (supabaseError) {
+            console.warn('Supabase connection failed on GitHub Pages, using localStorage:', supabaseError);
+          }
+        }
+        
+        // 如果云端没有数据或失败，从 localStorage 加载
+        if (Object.keys(cache).length === 0) {
+          console.log('No data from Supabase, loading from localStorage on GitHub Pages');
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key) {
+              const value = localStorage.getItem(key);
+              if (value !== null) {
+                cache[key] = value;
+              }
             }
           }
         }
-        console.log(`Loaded ${Object.keys(cache).length} items from localStorage on GitHub Pages`);
+        
+        console.log(`Storage initialized with ${Object.keys(cache).length} items on GitHub Pages`);
         initialized = true;
       } catch (e) {
-        console.warn('Failed to load from localStorage on GitHub Pages:', e);
-        initialized = true; // 无论如何都标记为已初始化
+        console.warn('Storage init failed on GitHub Pages:', e);
+        initialized = true; // 避免反复重试
       }
     }
     return;
@@ -360,8 +400,9 @@ export function setItem(key: string, value: string): void {
 /** 异步同步到云端（后台任务） */
 async function syncToCloud(key: string, value: string): Promise<void> {
   if (!useSupabase || !supabase) return;
-  
+
   try {
+    // 在 GitHub Pages 上，也尝试同步到云端
     const { error } = await supabase
       .from('app_data')
       .upsert({
