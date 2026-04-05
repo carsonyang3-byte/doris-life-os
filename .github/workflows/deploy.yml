@@ -35,6 +35,8 @@ jobs:
         run: npm run build
         env:
           PUBLIC_URL: /doris-life-os
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_KEY: ${{ secrets.VITE_SUPABASE_KEY }}
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
