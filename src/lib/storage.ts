@@ -190,8 +190,7 @@ async function mergeFromCloudAsync(): Promise<void> {
     
     const fetchPromise = supabase
       .from('app_data')
-      .select('key, value, updated_at')
-      .eq('user_id', 'default_user');
+      .select('key, value, updated_at');
 
     const timeoutPromise = new Promise<{ data: null; error: Error }>((resolve) =>
       setTimeout(() => resolve({ data: null, error: new Error('Cloud merge timeout after 5s') }), 5000)
@@ -280,8 +279,7 @@ export async function refreshFromCloud(): Promise<void> {
   try {
     const { data, error } = await supabase
       .from('app_data')
-      .select('key, value, updated_at')
-      .eq('user_id', 'default_user');
+      .select('key, value, updated_at');
     
     if (error || !data) {
       console.warn('Refresh from cloud failed:', error?.message);
@@ -359,12 +357,11 @@ async function syncToCloud(key: string, value: string): Promise<void> {
     const { error } = await supabase
       .from('app_data')
       .upsert({
-        user_id: 'default_user',
         key,
         value,
         updated_at: now
       }, {
-        onConflict: 'user_id,key'
+        onConflict: 'key'
       });
       
     if (error) {
@@ -411,7 +408,6 @@ async function deleteFromCloud(key: string): Promise<void> {
     const { error } = await supabase
       .from('app_data')
       .delete()
-      .eq('user_id', 'default_user')
       .eq('key', key);
     
     if (error) {
