@@ -36,3 +36,8 @@ export function getGreeting(hour: number): string {
 export function formatCurrency(amount: number): string {
   return amount.toLocaleString('zh-CN', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
+
+// ===== Tailwind CSS Class Merging =====
+export function cn(...classes: (string | boolean | undefined | null)[]): string {
+  return classes.filter(Boolean).join(' ');
+}
