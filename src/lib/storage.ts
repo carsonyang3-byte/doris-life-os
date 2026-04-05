@@ -43,36 +43,27 @@ export async function checkPassword(input: string): Promise<boolean> {
     }
   }
   
-  const debugInfo = { 
-    hasStored: !!stored, 
-    storedType: typeof stored,
-    storedLength: stored?.length,
-    inputLength: input?.length,
-    storedValue: stored ?? '<<<NULL>>>',
-    inputValue: input,
-    rawEqual: stored === input
-  };
-  console.log('=== checkPassword debug ===', JSON.stringify(debugInfo));
-  
   if (!stored) {
     console.warn('!!! PASSWORD NOT FOUND IN LOCAL STORAGE !!! key:', AUTH_KEY);
+    return false;
+  }
+  
+  // 检测脏数据：如果存的是 "[object Object]"，说明被云端同步损坏了，清除它
+  if (stored === '[object Object]' || (stored.startsWith('[') && stored.endsWith(']'))) {
+    console.warn('!!! CORRUPTED PASSWORD DATA DETECTED, clearing !!!');
+    localStorage.removeItem(AUTH_KEY);
+    delete cache[AUTH_KEY];
     return false;
   }
   
   try {
     const parsed = JSON.parse(stored);
     if (parsed && typeof parsed === 'object' && parsed.password) {
-      const match = parsed.password === input;
-      console.log('=== checkPassword result (object path) ===', JSON.stringify({ match }));
-      return match;
+      return parsed.password === input;
     }
-    const match = String(parsed) === input;
-    console.log('=== checkPassword result (string path) ===', JSON.stringify({ match, parsed: String(parsed), input }));
-    return match;
+    return String(parsed) === input;
   } catch {
-    const match = stored === input;
-    console.log('=== checkPassword result (raw path) ===', JSON.stringify({ match, stored, input }));
-    return match;
+    return stored === input;
   }
 }
 
@@ -234,6 +225,12 @@ async function mergeFromCloudAsync(): Promise<void> {
     for (const item of data) {
       if (!item.key || item.value === null) continue;
       
+      // 跳过内部键（密码、时间戳等），这些不应该从云端同步
+      if (item.key.startsWith('__')) {
+        skippedCount++;
+        continue;
+      }
+      
       const localTs = getLocalTimestamp(item.key);
       const cloudTs = item.updated_at;
       
@@ -371,6 +368,9 @@ export function setItem(key: string, value: string): void {
 /** 推送到云端 */
 async function syncToCloud(key: string, value: string): Promise<void> {
   if (!useSupabase || !supabase) return;
+
+  // 不同步内部键（密码、时间戳等）
+  if (key.startsWith('__')) return;
 
   try {
     const now = new Date().toISOString();
