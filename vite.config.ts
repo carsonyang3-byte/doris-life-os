@@ -7,6 +7,16 @@ import type { IncomingMessage } from "http"
 export default defineConfig({
   base: '/doris-life-os/',
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        // 为JS和CSS文件添加哈希值，防止缓存
+        entryFileNames: 'assets/[name]-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash].[ext]'
+      }
+    }
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
