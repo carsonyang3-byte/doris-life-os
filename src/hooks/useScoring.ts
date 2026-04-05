@@ -10,13 +10,14 @@
  *   阅读  +2 → growth
  *   反思  +2 → inner
  *   喝水  +1 → energy
+ *   自定义习惯  +1 → energy（默认）
  *   写了3件事    +2 → workMoney
  *   写了开心小事  +1 → family
  *   写了觉察     +3 → inner
- *   全勤日（6项全完成）+2 → 每维度各+2
+ *   全勤日（全部习惯完成）+2 → 每维度各+2
  */
 import { useMemo } from 'react';
-import { HABIT_KEYS } from '../lib/constants';
+import { loadHabitList } from './useHabits';
 import { formatDate } from '../lib/utils';
 import { getItem } from '../lib/storage';
 
@@ -27,7 +28,7 @@ interface ScoreRule {
   dimension: keyof typeof DIMENSION_MAX;
 }
 
-/** 每个习惯打卡的积分 */
+/** 内置习惯的积分规则 */
 const HABIT_SCORES: Record<string, ScoreRule> = {
   '冥想': { points: 3, dimension: 'energy' },
   '运动': { points: 3, dimension: 'energy' },
@@ -36,6 +37,9 @@ const HABIT_SCORES: Record<string, ScoreRule> = {
   '反思': { points: 2, dimension: 'inner' },
   '喝水': { points: 1, dimension: 'energy' },
 };
+
+/** 自定义习惯默认积分规则 */
+const DEFAULT_HABIT_SCORE: ScoreRule = { points: 1, dimension: 'energy' };
 
 /** 每日记录的额外积分 */
 const TODAY_SCORES = {
@@ -94,6 +98,7 @@ function getTodayRecord(dateStr: string): { tasks: string[]; happy: string; awar
 
 export function useScoring() {
   const dimensions = useMemo(() => {
+    const habitList = loadHabitList();
     const scores: Record<string, number> = {
       energy: 0, inner: 0, family: 0, workMoney: 0, growth: 0,
     };
@@ -113,15 +118,15 @@ export function useScoring() {
       // 习惯打卡积分
       if (habits) {
         let completedCount = 0;
-        for (const key of HABIT_KEYS) {
+        for (const key of habitList) {
           if (habits[key]) {
-            const rule = HABIT_SCORES[key];
-            if (rule) scores[rule.dimension] += rule.points;
+            const rule = HABIT_SCORES[key] ?? DEFAULT_HABIT_SCORE;
+            scores[rule.dimension] += rule.points;
             completedCount++;
           }
         }
         // 全勤日加分
-        if (completedCount === HABIT_KEYS.length) {
+        if (completedCount === habitList.length && habitList.length > 0) {
           for (const dim of Object.keys(scores)) {
             scores[dim] += TODAY_SCORES.allHabits.points;
           }
@@ -161,19 +166,20 @@ export function useScoring() {
 
   /** 获取今日积分（用于展示今日获得分数） */
   const todayScore = useMemo(() => {
+    const habitList = loadHabitList();
     const todayStr = formatDate(new Date());
     const habits = getHabitsForDate(todayStr);
     const record = getTodayRecord(todayStr);
     let score = 0;
     if (habits) {
-      for (const key of HABIT_KEYS) {
+      for (const key of habitList) {
         if (habits[key]) {
-          const rule = HABIT_SCORES[key];
-          if (rule) score += rule.points;
+          const rule = HABIT_SCORES[key] ?? DEFAULT_HABIT_SCORE;
+          score += rule.points;
         }
       }
-      const completedCount = HABIT_KEYS.filter(k => habits[k]).length;
-      if (completedCount === HABIT_KEYS.length) score += 2;
+      const completedCount = habitList.filter(k => habits[k]).length;
+      if (completedCount === habitList.length && habitList.length > 0) score += 2;
     }
     if (record) {
       if (record.tasks?.filter(t => t.trim()).length > 0) score += 2;

@@ -6,6 +6,7 @@ import { getItem, setItem } from '../lib/storage';
 
 const STORAGE_KEY = 'life-os-habits';
 const AWARENESS_PREFIX = 'life-os-awareness-';
+export const HABIT_LIST_KEY = 'life-os-habit-list';
 
 function loadHabitData(): HabitData {
   try {
@@ -17,6 +18,18 @@ function loadHabitData(): HabitData {
 
 function saveHabitData(data: HabitData) {
   setItem(STORAGE_KEY, JSON.stringify(data));
+}
+
+export function loadHabitList(): string[] {
+  try {
+    const stored = getItem(HABIT_LIST_KEY);
+    if (stored) return JSON.parse(stored);
+  } catch {}
+  return [...HABIT_KEYS];
+}
+
+function saveHabitList(list: string[]) {
+  setItem(HABIT_LIST_KEY, JSON.stringify(list));
 }
 
 function seededRandom(seed: number) {
@@ -59,10 +72,61 @@ export function useHabits() {
     return loadHabitData();
   });
 
+  const [habitList, setHabitList] = useState<string[]>(() => loadHabitList());
+
   const toggleHabit = useCallback((dateStr: string, habit: string) => {
     const current = loadHabitData();
     if (!current[dateStr]) current[dateStr] = {};
     current[dateStr][habit] = !current[dateStr][habit];
+    saveHabitData(current);
+    setData({ ...current });
+  }, []);
+
+  const addHabit = useCallback((habitName: string) => {
+    const trimmed = habitName.trim();
+    if (!trimmed) return;
+    setHabitList((prev) => {
+      if (prev.includes(trimmed)) return prev;
+      const next = [...prev, trimmed];
+      saveHabitList(next);
+      return next;
+    });
+  }, []);
+
+  const removeHabit = useCallback((habitName: string) => {
+    setHabitList((prev) => {
+      const next = prev.filter((h) => h !== habitName);
+      saveHabitList(next);
+      return next;
+    });
+    // 清理所有历史记录中的该习惯
+    const current = loadHabitData();
+    for (const dateStr of Object.keys(current)) {
+      if (habitName in current[dateStr]) {
+        delete current[dateStr][habitName];
+      }
+    }
+    saveHabitData(current);
+    setData({ ...current });
+  }, []);
+
+  const renameHabit = useCallback((oldName: string, newName: string) => {
+    const trimmed = newName.trim();
+    if (!trimmed || trimmed === oldName) return;
+    setHabitList((prev) => {
+      if (prev.includes(trimmed)) return prev;
+      const next = prev.map((h) => (h === oldName ? trimmed : h));
+      saveHabitList(next);
+      return next;
+    });
+    // 更新所有历史记录中的键名
+    const current = loadHabitData();
+    for (const dateStr of Object.keys(current)) {
+      if (oldName in current[dateStr]) {
+        current[dateStr][trimmed] = current[dateStr][oldName];
+        delete current[dateStr][oldName];
+      }
+    }
     saveHabitData(current);
     setData({ ...current });
   }, []);
@@ -85,7 +149,6 @@ export function useHabits() {
   }, []);
 
   const getJournalDays = useCallback(() => {
-    const all = loadHabitData();
     let count = 0;
     for (let i = 0; i < 365; i++) {
       const d = new Date(new Date());
@@ -105,6 +168,7 @@ export function useHabits() {
 
   const getHeatmapData = useCallback(() => {
     const all = loadHabitData();
+    const list = loadHabitList();
     const today = new Date();
     const cells: { date: string; count: number }[] = [];
     for (let i = 83; i >= 0; i--) {
@@ -112,11 +176,22 @@ export function useHabits() {
       d.setDate(d.getDate() - i);
       const dateStr = formatDate(d);
       const habits = all[dateStr];
-      const count = habits ? HABIT_KEYS.filter((k) => habits[k]).length : 0;
+      const count = habits ? list.filter((k) => habits[k]).length : 0;
       cells.push({ date: dateStr, count });
     }
     return cells;
   }, []);
 
-  return { data, toggleHabit, getStreak, getJournalDays, getExerciseCount, getHeatmapData };
+  return {
+    data,
+    habitList,
+    toggleHabit,
+    addHabit,
+    removeHabit,
+    renameHabit,
+    getStreak,
+    getJournalDays,
+    getExerciseCount,
+    getHeatmapData,
+  };
 }

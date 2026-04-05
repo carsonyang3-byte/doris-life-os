@@ -1,10 +1,10 @@
-import { useState, useEffect, useMemo, Fragment } from 'react';
-import { ChevronRight, ChevronLeft, CheckCircle2, Sun, Eye, Sparkles, CalendarDays, Settings, RefreshCw } from 'lucide-react';
+import { useState, useEffect, useMemo, Fragment, useRef } from 'react';
+import { ChevronRight, ChevronLeft, CheckCircle2, Sun, Eye, Sparkles, CalendarDays, Settings, RefreshCw, Plus, Pencil, Trash2, X, Check } from 'lucide-react';
 import { useToday, useTodayData, useQuotes, useWeeklyFocus, useHabits, useMoney, useGoals, useScoring, useLibrary, useVisionEngine } from '../hooks';
 import { useAIInsight } from '../hooks/useAIInsight';
 import type { InsightTab } from '../hooks/useAIInsight';
 import { useGoalProgress } from '../hooks/useGoalProgress';
-import { VISION, HABIT_KEYS } from '../lib/constants';
+import { VISION } from '../lib/constants';
 import { formatDate, getWeekRange } from '../lib/utils';
 import { getItem, setItem } from '../lib/storage';
 
@@ -18,7 +18,7 @@ export default function DashboardPage({ onPageChange }: DashboardPageProps) {
   const { items: libraryItems } = useLibrary();
   const { current: quote, next, isFromLibrary, libraryCount } = useQuotes(libraryItems, todayStr);
   const { focus, dimensions, updateFocus } = useWeeklyFocus();
-  const { data: habitData, toggleHabit, getStreak, getJournalDays, getExerciseCount, getHeatmapData } = useHabits();
+  const { data: habitData, habitList, toggleHabit, addHabit, removeHabit, renameHabit, getStreak, getJournalDays, getExerciseCount, getHeatmapData } = useHabits();
   const { records: moneyRecords, getWeeklyData } = useMoney();
   const { goals } = useGoals();
   const { details: goalDetails } = useGoalProgress(goals);
@@ -99,6 +99,13 @@ export default function DashboardPage({ onPageChange }: DashboardPageProps) {
   const [showKeyInput, setShowKeyInput] = useState(false);
   const [keyInput, setKeyInput] = useState('');
   const { insightText, isTyping, isLoading, error: insightError, apiKey, saveApiKey, generateInsight } = useAIInsight();
+
+  // ---- 管理习惯 Modal ----
+  const [showHabitModal, setShowHabitModal] = useState(false);
+  const [newHabitInput, setNewHabitInput] = useState('');
+  const [editingHabit, setEditingHabit] = useState<string | null>(null);
+  const [editHabitValue, setEditHabitValue] = useState('');
+  const editInputRef = useRef<HTMLInputElement>(null);
 
   // 切换 tab 时自动生成新洞察
   useEffect(() => {
@@ -295,7 +302,15 @@ export default function DashboardPage({ onPageChange }: DashboardPageProps) {
 
       {/* Row 4: Progress */}
       <div className="card-base">
-        <SectionHeader dot="warning" title="Progress" />
+        <SectionHeader dot="warning" title="Progress" extra={
+          <button
+            onClick={() => setShowHabitModal(true)}
+            className="flex items-center gap-1 text-[11px] text-[var(--text-muted)] bg-[var(--bg-subtle)] px-2.5 py-1 rounded-md cursor-pointer hover:text-[var(--accent)] transition-colors font-medium hover:bg-[var(--bg-hover)]"
+          >
+            <Settings className="w-3 h-3" />
+            管理习惯
+          </button>
+        } />
         <div className="mb-5">
           <div className="flex items-center gap-2 mb-3">
             <CheckCircle2 className="w-3 h-3 text-[var(--accent)]" />
@@ -303,7 +318,7 @@ export default function DashboardPage({ onPageChange }: DashboardPageProps) {
             <span className="text-[11px] text-[var(--text-muted)] ml-auto">{dateCN}</span>
           </div>
           <div className="grid grid-cols-3 md:grid-cols-6 gap-2.5">
-            {HABIT_KEYS.map((key) => (
+            {habitList.map((key) => (
               <div
                 key={key}
                 className={`habit-checkin-item ${todayHabits[key] ? 'checked' : ''}`}
@@ -343,13 +358,121 @@ export default function DashboardPage({ onPageChange }: DashboardPageProps) {
                 <div
                   key={cell.date}
                   className={`heatmap-cell heatmap-${level}`}
-                  title={`${cell.date}: ${cell.count}/${HABIT_KEYS.length}`}
+                  title={`${cell.date}: ${cell.count}/${habitList.length}`}
                 />
               );
             })}
           </div>
         </div>
       </div>
+
+      {/* 管理习惯 Modal */}
+      {showHabitModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.5)' }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowHabitModal(false); }}
+        >
+          <div className="card-base w-full max-w-sm max-h-[80vh] flex flex-col" style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-[14px] font-semibold text-[var(--text-primary)]">管理习惯项</h3>
+              <button
+                onClick={() => { setShowHabitModal(false); setEditingHabit(null); setNewHabitInput(''); }}
+                className="p-1 rounded-md hover:bg-[var(--bg-hover)] text-[var(--text-muted)] transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* 习惯列表 */}
+            <div className="flex-1 overflow-y-auto mb-4 flex flex-col gap-1.5">
+              {habitList.map((habit) => (
+                <div key={habit} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--bg-subtle)] group">
+                  {editingHabit === habit ? (
+                    <>
+                      <input
+                        ref={editInputRef}
+                        type="text"
+                        value={editHabitValue}
+                        onChange={(e) => setEditHabitValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            renameHabit(habit, editHabitValue);
+                            setEditingHabit(null);
+                          } else if (e.key === 'Escape') {
+                            setEditingHabit(null);
+                          }
+                        }}
+                        className="flex-1 text-[12px] px-2 py-0.5 rounded border border-[var(--accent)] bg-[var(--bg-card)] text-[var(--text-primary)] focus:outline-none"
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => { renameHabit(habit, editHabitValue); setEditingHabit(null); }}
+                        className="p-1 rounded text-[var(--success)] hover:bg-[var(--bg-hover)] transition-colors"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => setEditingHabit(null)}
+                        className="p-1 rounded text-[var(--text-muted)] hover:bg-[var(--bg-hover)] transition-colors"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="flex-1 text-[13px] text-[var(--text-primary)]">{habit}</span>
+                      <button
+                        onClick={() => { setEditingHabit(habit); setEditHabitValue(habit); }}
+                        className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--bg-hover)] transition-colors opacity-0 group-hover:opacity-100"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (window.confirm(`确定删除「${habit}」？该操作会清除所有历史打卡记录。`)) {
+                            removeHabit(habit);
+                          }
+                        }}
+                        className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--danger)] hover:bg-[var(--bg-hover)] transition-colors opacity-0 group-hover:opacity-100"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </>
+                  )}
+                </div>
+              ))}
+              {habitList.length === 0 && (
+                <p className="text-[12px] text-[var(--text-muted)] text-center py-4">暂无习惯，请添加</p>
+              )}
+            </div>
+
+            {/* 添加新习惯 */}
+            <div className="flex gap-2 pt-3 border-t border-[var(--border)]">
+              <input
+                type="text"
+                value={newHabitInput}
+                onChange={(e) => setNewHabitInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newHabitInput.trim()) {
+                    addHabit(newHabitInput);
+                    setNewHabitInput('');
+                  }
+                }}
+                placeholder="新增习惯名称..."
+                className="flex-1 text-[12px] px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
+              />
+              <button
+                onClick={() => { if (newHabitInput.trim()) { addHabit(newHabitInput); setNewHabitInput(''); } }}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-[var(--accent)] text-white hover:opacity-90 transition-opacity"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                添加
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Row 5: Money Mini */}
       <div className="card-base">
