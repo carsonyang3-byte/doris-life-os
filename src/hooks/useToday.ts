@@ -7,17 +7,27 @@ import { getItem, setItem } from '../lib/storage';
 const TODAY_PREFIX = 'life-os-today-';
 const AWARENESS_PREFIX = 'life-os-awareness-';
 
+// ── 自动轮换：按 dayOfYear 决定当天用哪套 daily set ──
+function getAutoDailySet(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  const dayOfYear = Math.floor((d.getTime() - new Date(d.getFullYear(), 0, 0).getTime()) / 86400000);
+  return DAILY_SET_KEYS[dayOfYear % DAILY_SET_KEYS.length];
+}
+
 export function useToday() {
   const [date] = useState(new Date());
   const todayStr = formatDate(date);
   const greeting = getGreeting(date.getHours());
   const dateCN = formatDateCN(todayStr);
 
-  // 从当前用户选择的 set 里取每日一问
-  const activeSetKey = (getItem('life-os-reflect-daily-set') as keyof typeof DAILY_QUESTION_SETS) || DAILY_SET_KEYS[0];
-  const questions = DAILY_QUESTION_SETS[activeSetKey] || DAILY_QUESTION_SETS[DAILY_SET_KEYS[0]];
-  const dayOfYear = Math.floor((date.getTime() - new Date(date.getFullYear(), 0, 0).getTime()) / 86400000);
-  const todayQ = questions[dayOfYear % questions.length];
+  // 从自动轮换的 set 中取今天的每日一题
+  const todayQ = useMemo(() => {
+    const autoSetKey = getAutoDailySet(todayStr);
+    const questions = DAILY_QUESTION_SETS[autoSetKey as keyof typeof DAILY_QUESTION_SETS];
+    if (!questions || questions.length === 0) return { q: '今天有什么值得记录的？', framework: 'Daily' };
+    const dayOfYear = Math.floor((date.getTime() - new Date(date.getFullYear(), 0, 0).getTime()) / 86400000);
+    return questions[dayOfYear % questions.length];
+  }, [todayStr, date]);
 
   const quoteIndex = Math.floor(
     (date.getTime() - new Date(date.getFullYear(), 0, 0).getTime()) / 86400000

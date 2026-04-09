@@ -4,7 +4,7 @@ import { useToday, useTodayData, useQuotes, useWeeklyFocus, useHabits, useMoney,
 import { useAIInsight } from '../hooks/useAIInsight';
 import type { InsightTab } from '../hooks/useAIInsight';
 import { useGoalProgress } from '../hooks/useGoalProgress';
-import { VISION } from '../lib/constants';
+import { VISION, DAILY_QUESTION_SETS, DAILY_SET_KEYS } from '../lib/constants';
 import { formatDate, getWeekRange } from '../lib/utils';
 import { getItem, setItem } from '../lib/storage';
 
@@ -555,7 +555,11 @@ export default function DashboardPage({ onPageChange }: DashboardPageProps) {
             All Questions →
           </button>
         } />
-        <ReflectMini question={useToday().todayQ} />
+        <ReflectMini question={useToday().todayQ} setLabel={(() => {
+          const d = new Date();
+          const dayOfYear = Math.floor((d.getTime() - new Date(d.getFullYear(), 0, 0).getTime()) / 86400000);
+          return DAILY_SET_KEYS[dayOfYear % DAILY_SET_KEYS.length];
+        })()} />
       </div>
 
       {/* Row 7: Goals + Vision Distance (积分驱动) */}
@@ -744,13 +748,20 @@ function MoneySparkline({ weeks, height = 40 }: { weeks: { income: number; expen
   );
 }
 
-function ReflectMini({ question }: { question: { q: string; framework: string } }) {
+function ReflectMini({ question, setLabel }: { question: { q: string; framework: string }; setLabel?: string }) {
   return (
     <div className="rounded-xl p-5 bg-[var(--bg-subtle)] border-l-[3px] border-[var(--accent)]">
       <div className="text-[15px] font-medium text-[var(--text-primary)] leading-[1.6] mb-3">{question.q}</div>
-      <span className="inline-block text-[10px] px-2 py-1 rounded font-medium uppercase tracking-wide" style={{ background: 'rgba(201,169,110,0.1)', color: 'var(--accent-dark)' }}>
-        Daily · {question.framework}
-      </span>
+      <div className="flex items-center gap-2">
+        <span className="inline-block text-[10px] px-2 py-1 rounded font-medium tracking-wide" style={{ background: 'rgba(201,169,110,0.1)', color: 'var(--accent-dark)' }}>
+          {question.framework}
+        </span>
+        {setLabel && (
+          <span className="inline-block text-[10px] px-2 py-1 rounded font-medium" style={{ background: 'rgba(201,169,110,0.06)', color: 'var(--text-muted)' }}>
+            {setLabel}
+          </span>
+        )}
+      </div>
     </div>
   );
 }

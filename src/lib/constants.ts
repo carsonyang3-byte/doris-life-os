@@ -71,181 +71,120 @@ export const QUOTES = [
   { text: '今天是你余生中最年轻的一天。', book: '你当像鸟飞往你的山', author: '塔拉·韦斯特弗' },
 ] as const;
 
-// ── 反思问题集（8 个每日 + 6 个每周，基于心理学/哲学理论体系） ──
-
-// 每个问题带 framework（中文体系标签）和 source（具体来源）
-// framework 格式：「体系·子领域」，帮助用户了解正在用什么方式反思
-
+// ── 8 套每日反思问题集 ──
 export const DAILY_QUESTION_SETS = {
+  '自我觉察': [
+    { q: '今天我做了什么让自己感到骄傲的事？', framework: '自我觉察·成就' },
+    { q: '如果今天可以重来，我会改变什么？', framework: '自我觉察·反思' },
+    { q: '今天我的注意力花在了哪里？值得吗？', framework: '自我觉察·专注' },
+    { q: '今天我有没有给自己留出「什么都不做」的时间？', framework: '自我觉察·休息' },
+    { q: '今天哪个瞬间让我感觉「活着真好」？', framework: '自我觉察·正念' },
+    { q: '今天我对孩子/家人说了什么让我满意的话？', framework: '自我觉察·家庭' },
+    { q: '今天我的身体在告诉我什么？', framework: '自我觉察·身体' },
+  ] as const,
+  '感恩日记': [
+    { q: '今天最让我心存感激的一件事是什么？', framework: '感恩·日常' },
+    { q: '今天有谁的出现让我感到温暖？', framework: '感恩·关系' },
+    { q: '今天有什么小事顺利进行，让我感到轻松？', framework: '感恩·小确幸' },
+    { q: '今天我照顾自己的方式是？', framework: '感恩·自我关怀' },
+  ] as const,
+  '身体对话': [
+    { q: '今天我的身体哪个部位最放松？哪个最紧绷？', framework: '身体·扫描' },
+    { q: '今天我的身体发出了什么信号？我回应了吗？', framework: '身体·信号' },
+    { q: '今天我吃了什么，身体感觉如何？', framework: '身体·饮食' },
+    { q: '今天我的能量水平如何？什么时候最高/最低？', framework: '身体·能量' },
+  ] as const,
+  '情绪记录': [
+    { q: '今天最强烈的情绪是什么？它出现在什么情境？', framework: '情绪·识别' },
+    { q: '这个情绪在告诉我什么需求或信念？', framework: '情绪·信息' },
+    { q: '今天我如何回应了自己的情绪？接纳还是抗拒？', framework: '情绪·回应' },
+    { q: '如果用一种颜色和形状形容今天的心情，是什么？', framework: '情绪·具象' },
+  ] as const,
   'CBT认知重构': [
-    { q: '今天有没有一个瞬间，我的想法让情绪变差了？那个想法是什么？', framework: 'CBT·自动思维', source: 'Beck 认知治疗' },
-    { q: '那个想法是事实，还是我的推断？有什么证据支持或反对它？', framework: 'CBT·证据检验', source: 'Beck 认知治疗' },
-    { q: '如果朋友遇到同样的事跟我这么说，我会怎么回应ta？', framework: 'CBT·双重标准', source: 'Beck 认知治疗' },
-    { q: '今天我有没有用「总是」「从来不」这样的词形容自己？实际情况是什么？', framework: 'CBT·去极端化', source: 'Burns 认知扭曲' },
-    { q: '今天我有没有把一件事的结果等同于我整个人生的价值？', framework: 'CBT·去标签化', source: 'Burns 认知扭曲' },
-    { q: '今天发生了什么不好的事？最坏的结果是什么？最可能的结果是什么？', framework: 'CBT·去灾难化', source: 'Burns 认知扭曲' },
-    { q: '今天我有没有在读别人的心思（猜测ta对我的看法）？我确定吗？', framework: 'CBT·读心术检验', source: 'Burns 认知扭曲' },
-    { q: '今天我有没有因为一个细节就否定了整件事？如果用0-10分评价，实际有多严重？', framework: 'CBT·灰度思考', source: 'Burns 认知扭曲' },
-    { q: '今天我有没有「应该」句式出现？（我应该在/我必须/我不得不）换成「我选择」会怎样？', framework: 'CBT·应该句式', source: 'Ellis 理性情绪' },
-    { q: '如果用旁观者的角度看今天发生的事，我会有什么不同的评价？', framework: 'CBT·认知距离', source: 'Beck 认知治疗' },
+    { q: '今天有没有哪个瞬间我在「灾难化」或「非黑即白」地想问题？', framework: 'CBT·自动思维' },
+    { q: '那个想法的证据支持和不支持各是什么？', framework: 'CBT·证据检验' },
+    { q: '如果朋友遇到同样的情况，我会怎么对她/他说？', framework: 'CBT·双重标准' },
+    { q: '用更平衡的方式重新描述这件事，我会怎么说？', framework: 'CBT·认知重构' },
+    { q: '我今天的思维陷阱是什么？过度概括、读心术、还是应该句式？', framework: 'CBT·思维陷阱' },
   ] as const,
-
   'ACT接纳承诺': [
-    { q: '今天我有没有在跟某个想法「较劲」？如果只是看着它飘过呢？', framework: 'ACT·认知解离', source: 'Hayes 接纳承诺疗法' },
-    { q: '今天我试图推开或压抑的情绪是什么？如果我允许它在这里呢？', framework: 'ACT·接纳', source: 'Hayes 接纳承诺疗法' },
-    { q: '今天我的行为是在朝我真正在乎的方向走，还是在逃避不舒服？', framework: 'ACT·价值方向', source: 'Hayes 接纳承诺疗法' },
-    { q: '如果我正在做对今天来说最重要的事，我此刻应该正在做什么？', framework: 'ACT·承诺行动', source: 'Hayes 接纳承诺疗法' },
-    { q: '今天我把自己当成了「观察者」还是「被想法带走的人」？', framework: 'ACT·观察者自我', source: 'Hayes 接纳承诺疗法' },
-    { q: '今天我在回避什么感受？那个回避让我付出了什么代价？', framework: 'ACT·经验性回避', source: 'Hayes 接纳承诺疗法' },
-    { q: '今天有没有一个想法让我停下了脚步？那个想法是真的有用，还是只是在保护我不冒险？', framework: 'ACT·想法vs事实', source: 'Hayes 接纳承诺疗法' },
-    { q: '此刻如果我完全接受现在的心情，不做任何改变，我会做什么？', framework: 'ACT·当下接纳', source: 'Hayes 接纳承诺疗法' },
-    { q: '今天我做的事里，哪件是「哪怕不舒服也值得做」的？', framework: 'ACT·意义优先', source: 'Hayes 接纳承诺疗法' },
+    { q: '今天我在逃避什么不舒服的感受？用什么方式逃避的？', framework: 'ACT·经验性回避' },
+    { q: '如果我不再和这个情绪对抗，它会如何变化？', framework: 'ACT·接纳' },
+    { q: '今天我的行为是否符合我真正在乎的价值？', framework: 'ACT·价值方向' },
+    { q: '如果带着这个不适感去做一件重要的事，我会做什么？', framework: 'ACT·承诺行动' },
+    { q: '我能像观察云朵一样观察自己的想法吗？它只是想法，不是事实。', framework: 'ACT·认知解离' },
   ] as const,
-
   '斯多葛省察': [
-    { q: '今天有哪些事在我的控制范围之外，我却在为此焦虑？', framework: '斯多葛·控制二分', source: 'Epictetus' },
-    { q: '今天我有没有把「偏好」当成了「必须」？如果我把它降级为「有则更好」呢？', framework: '斯多葛·偏好vs必须', source: 'Epictetus' },
-    { q: '今天发生了什么让我不舒服的事？这件事本身是坏的，还是我对它的判断让它变坏了？', framework: '斯多葛·判断先行', source: 'Marcus Aurelius' },
-    { q: '今天我有没有为还没发生的事浪费精力？那些事有多少真的发生了？', framework: '斯多葛·当下专注', source: 'Seneca' },
-    { q: '今天我做了什么让世界变得稍微好一点的事？', framework: '斯多葛·公民责任', source: 'Marcus Aurelius' },
-    { q: '今天我有没有提醒自己：这件事也会过去？', framework: '斯多葛·无常', source: 'Marcus Aurelius' },
-    { q: '如果我今晚就要离开，我今天过得是否问心无愧？', framework: '斯多葛·终日检视', source: 'Seneca' },
-    { q: '今天我有没有因为别人的行为而影响自己的内心平静？那个行为真的值得我付出平静吗？', framework: '斯多葛·内在堡垒', source: 'Marcus Aurelius' },
-    { q: '今天我面临的困难，是不是也在锻炼我某种品格？', framework: '斯多葛·障碍即道路', source: 'Marcus Aurelius' },
-    { q: '今天我有没有把时间花在了真正重要的事上？还是被琐事消耗了？', framework: '斯多葛·时间审视', source: 'Seneca' },
+    { q: '今天哪些事情在我的控制范围之外？我是否为它们浪费了精力？', framework: '斯多葛·控制二分' },
+    { q: '今天我是否在用「事情应该如此」的标准要求现实？', framework: '斯多葛·应然执念' },
+    { q: '如果今天是我生命的最后一天，我对自己度过的方式满意吗？', framework: '斯多葛·终末省察' },
+    { q: '今天我有没有预想困难（消极想象），从而更珍惜当下拥有的？', framework: '斯多葛·消极想象' },
   ] as const,
-
-  '正念觉察': [
-    { q: '此刻我的身体感觉如何？不需要改变它，只是注意到了什么？', framework: '正念·身体扫描', source: 'Kabat-Zinn MBSR' },
-    { q: '今天我有没有一个时刻是完全「在这里」的？那个时刻我在做什么？', framework: '正念·当下锚点', source: 'Kabat-Zinn MBSR' },
-    { q: '今天我的呼吸有没有变得急促或浅短的时候？当时发生了什么？', framework: '正念·呼吸觉察', source: 'Thich Nhat Hanh' },
-    { q: '今天我有没有在自动模式下做事情（吃饭、走路、说话）？选一件事重新「体验」会怎样？', framework: '正念·自动模式', source: 'Kabat-Zinn MBSR' },
-    { q: '今天我的思绪最常飘到哪里？过去还是未来？', framework: '正念·思绪观察', source: 'Segal MBCT' },
-    { q: '如果给自己的觉察程度打0-10分，今天是几分？什么让它高或低？', framework: '正念·觉察刻度', source: 'Langer 专念' },
-    { q: '今天我有没有注意到自己正在评判某事？评判本身没问题——注意到评判就是觉察。', framework: '正念·不评判', source: 'Kabat-Zinn MBSR' },
-    { q: '今天我的五种感官分别接收到了什么？选一个最深刻的写下来。', framework: '正念·感官锚定', source: 'Kabat-Zinn MBSR' },
-    { q: '今天我做了什么「微小的正念」？哪怕是认真喝了一口水、深呼吸了一次。', framework: '正念·微实践', source: 'Thich Nhat Hanh' },
-  ] as const,
-
-  'PERMA幸福': [
-    { q: '今天让我微笑的瞬间是什么？（积极情绪）', framework: 'PERMA·积极情绪', source: 'Seligman 积极心理学' },
-    { q: '今天我做什么事的时候感觉时间过得很快？（投入）', framework: 'PERMA·投入', source: 'Seligman 积极心理学' },
-    { q: '今天我和谁有了一次有意义的互动？（关系）', framework: 'PERMA·关系', source: 'Seligman 积极心理学' },
-    { q: '今天我做的哪件事让我觉得「这很重要」？（意义）', framework: 'PERMA·意义', source: 'Seligman 积极心理学' },
-    { q: '今天我完成了一件什么事，不管多小？（成就）', framework: 'PERMA·成就', source: 'Seligman 积极心理学' },
-    { q: '今天的积极情绪和消极情绪比例大概是多少？1:1？2:1？更高？', framework: 'PERMA·情绪比率', source: 'Fredrickson 拓展构建' },
-    { q: '今天我有没有主动创造一个积极情绪的时刻？还是只是在等它发生？', framework: 'PERMA·主动创造', source: 'Seligman 积极心理学' },
-    { q: '今天我有没有感到自己被理解或被支持？那个时刻是什么？', framework: 'PERMA·被支持感', source: 'Seligman 积极心理学' },
-    { q: '今天我在做的事里，哪件是「因为想做」而不是「因为应该做」？', framework: 'PERMA·内在动机', source: 'Seligman 积极心理学' },
-  ] as const,
-
-  '依纳爵省察': [
-    { q: '回顾今天，哪个时刻让我感到最有活力、最充实？（安慰时刻）', framework: '省察·安慰', source: 'Ignatius 依纳爵' },
-    { q: '哪个时刻让我感到沉重、退缩或不安？（荒凉时刻）', framework: '省察·荒凉', source: 'Ignatius 依纳爵' },
-    { q: '在安慰的时刻，是什么让我感到充实？那个感受指向了我内心什么渴望？', framework: '省察·渴望辨识', source: 'Ignatius 依纳爵' },
-    { q: '在荒凉的时刻，我内心发生了什么？我是否被某种恐惧或自我否定带走了？', framework: '省察·荒凉根源', source: 'Ignatius 依纳爵' },
-    { q: '今天我是否对某个人或某件事感到感恩？那种感恩的感觉是什么样的？', framework: '省察·感恩', source: 'Ignatius 依纳爵' },
-    { q: '今天我有没有注意到自己内心的某种倾向或模式在重复出现？', framework: '省察·模式辨识', source: 'Ignatius 依纳爵' },
-    { q: '如果明天我想多靠近「安慰」、少掉进「荒凉」，我可以做的一个小选择是什么？', framework: '省察·选择', source: 'Ignatius 依纳爵' },
-    { q: '今天我有没有忽略某个微小的内在声音或直觉？它可能在说什么？', framework: '省察·微小声音', source: 'Ignatius 依纳爵' },
-  ] as const,
-
-  '反省Hansei': [
-    { q: '今天我做了什么？如实描述，不加评判。', framework: 'Hansei·如实观察', source: '日本反省传统' },
-    { q: '今天有什么没有达到我预期的？差距在哪里？', framework: 'Hansei·差距发现', source: '日本反省传统' },
-    { q: '那个差距是因为能力不足、方法不对，还是态度问题？', framework: 'Hansei·根因分析', source: '丰田改善法' },
-    { q: '如果重新来一次，我会做什么不同的选择？', framework: 'Hansei·改善', source: '日本反省传统' },
-    { q: '今天我有没有假装没看到什么问题？为什么？', framework: 'Hansei·盲点', source: '日本反省传统' },
-    { q: '今天我从谁身上学到了什么？', framework: 'Hansei·他者之镜', source: '日本反省传统' },
-    { q: '今天我有没有因为面子或自尊，错过了一个学习的机会？', framework: 'Hansei·谦虚', source: '日本反省传统' },
-    { q: '今天的反省里，有没有一个我可以立刻行动的改善点？', framework: 'Hansei·行动', source: '丰田改善法' },
-    { q: '今天我有没有对自己说「这次够了」但其实还可以更好？', framework: 'Hansei·自我诚实', source: '日本反省传统' },
-  ] as const,
-
   '表达性书写': [
-    { q: '今天最让我心烦或困扰的事是什么？把它写出来，不用管逻辑。', framework: '表达·情绪释放', source: 'Pennebaker 表达性书写' },
-    { q: '这件事让我感觉到了什么？不是「我觉得」，是「我感受到」的身体感觉。', framework: '表达·身体感受', source: 'Pennebaker 表达性书写' },
-    { q: '关于这件事，我之前没敢对自己说的真话是什么？', framework: '表达·隐藏真相', source: 'Pennebaker 表达性书写' },
-    { q: '如果我继续写15分钟，不停笔，我会写出什么？试着写下去。', framework: '表达·自由书写', source: 'Pennebaker 表达性书写' },
-    { q: '这件事和我过去经历过的什么事有相似之处？', framework: '表达·模式链接', source: 'Pennebaker 表达性书写' },
-    { q: '关于这件事，我现在的理解和一个月前有什么不同？', framework: '表达·视角变化', source: 'Pennebaker 表达性书写' },
-    { q: '写完这些之后，我的感受有没有变化？身体有没有放松一点？', framework: '表达·书写效果', source: 'Pennebaker 表达性书写' },
-    { q: '如果这件事有一个意义或教训，它可能是什么？', framework: '表达·意义建构', source: 'Pennebaker 表达性书写' },
+    { q: '此刻我心里最想说却没说出口的话是什么？', framework: '书写·未言之声' },
+    { q: '如果我给今天的自己写一封信，我会说什么？', framework: '书写·自我对话' },
+    { q: '有什么感受我一直在压着？写出来会怎样？', framework: '书写·情绪释放' },
+    { q: '写完这些之后，我的身体感觉有什么变化？', framework: '书写·身心回响' },
   ] as const,
 } as const;
 
+// ── 6 套每周反思问题集 ──
 export const WEEKLY_QUESTION_SETS = {
   'KPT复盘': [
-    { q: '本周哪些事做对了，值得继续保持？（Keep）', framework: 'KPT·Keep', source: '日本复盘法' },
-    { q: '本周遇到了什么问题或卡点？（Problem）', framework: 'KPT·Problem', source: '日本复盘法' },
-    { q: '下周我想尝试的一个小改变是什么？（Try）', framework: 'KPT·Try', source: '日本复盘法' },
-    { q: '本周我浪费最多时间的事是什么？下周怎么减少它？', framework: 'KPT·效率审查', source: '日本复盘法' },
-    { q: '本周我说的最多的一句话/最常有的想法是什么？它帮到我了还是限制我了？', framework: 'KPT·语言模式', source: '日本复盘法' },
-    { q: '本周如果给自己打分（0-10），几分？扣分在哪里？', framework: 'KPT·量化自评', source: '日本复盘法' },
-    { q: '下周我最想完成的一件事是什么？什么条件下算「完成」？', framework: 'KPT·单点聚焦', source: '日本复盘法' },
+    { q: '本周我最大的成就是什么？', framework: 'KPT·Keep' },
+    { q: '本周最大的困扰或卡点是什么？', framework: 'KPT·Problem' },
+    { q: '下周我想尝试的一个小改变是什么？', framework: 'KPT·Try' },
+    { q: '本周我在哪些方面对自己的表现满意？', framework: 'KPT·自评' },
+    { q: '本周的时间分配是否符合我的优先级？', framework: 'KPT·对齐' },
+    { q: '本周我学到了什么新东西？', framework: 'KPT·成长' },
+    { q: '本周有没有什么是我想做但一直没做的？为什么？', framework: 'KPT·回避' },
   ] as const,
-
-  'Ryff幸福六维': [
-    { q: '本周我有没有独立做决定的时刻？还是多数时候在迎合他人？（自主）', framework: 'Ryff·自主', source: 'Carol Ryff 心理幸福感' },
-    { q: '本周我对生活的方向感如何？有在朝想去的方向走吗？（环境掌控）', framework: 'Ryff·环境掌控', source: 'Carol Ryff 心理幸福感' },
-    { q: '本周我在个人成长上有什么新的进展？（个人成长）', framework: 'Ryff·个人成长', source: 'Carol Ryff 心理幸福感' },
-    { q: '本周我和谁的关系让我感到满意或不满？为什么？（积极关系）', framework: 'Ryff·积极关系', source: 'Carol Ryff 心理幸福感' },
-    { q: '本周我有没有觉得自己在过着有意义的生活？意义来自哪里？（生活目的）', framework: 'Ryff·生活目的', source: 'Carol Ryff 心理幸福感' },
-    { q: '本周我有多了解自己？有没有发现一个以前没注意到的特质？（自我接纳）', framework: 'Ryff·自我接纳', source: 'Carol Ryff 心理幸福感' },
-    { q: '六维里本周最弱的是哪一维？最想改善的一小步是什么？', framework: 'Ryff·短板觉察', source: 'Carol Ryff 心理幸福感' },
+  '成长复盘': [
+    { q: '本周我最大的成长是什么？', framework: '成长·突破' },
+    { q: '本周我在认知上有什么新发现？', framework: '成长·洞察' },
+    { q: '本周我对自己有什么新的理解？', framework: '成长·自识' },
   ] as const,
-
-  '自我书写': [
-    { q: '写一封信给十年前的自己，告诉ta你现在最想让ta知道的一件事。', framework: '书写·过去自我', source: 'Peterson 自我书写' },
-    { q: '写一封信给十年后的自己，问ta三个你最想知道答案的问题。', framework: '书写·未来自我', source: 'Peterson 自我书写' },
-    { q: '如果你最好的朋友面临和你本周一样的困境，你会对ta说什么？', framework: '书写·友善视角', source: 'Peterson 自我书写' },
-    { q: '本周你有没有一个「如果当时……就好了」的想法？现在重新看，你能原谅当时的自己吗？', framework: '书写·自我宽恕', source: 'Neff 自我关怀' },
-    { q: '本周你最害怕的一件事是什么？如果那件事真的发生了，然后呢？', framework: '书写·恐惧探索', source: 'Peterson 自我书写' },
-    { q: '用三个词形容本周的自己。为什么是这三个词？', framework: '书写·自我画像', source: 'Peterson 自我书写' },
-    { q: '本周你放弃了什么？那个放弃是有意识的选择，还是惯性逃避？', framework: '书写·放弃审视', source: 'Peterson 自我书写' },
-  ] as const,
-
-  '教练式发问': [
-    { q: '本周你最想解决但又一直在拖延的问题是什么？', framework: '教练·聚焦', source: 'ICF 教练模型' },
-    { q: '如果这个问题已经解决了，你的生活会有什么不同？', framework: '教练·奇迹提问', source: '焦点解决疗法' },
-    { q: '你已经在用什么方式应对这个问题？哪些是有效的？', framework: '教练·资源识别', source: 'ICF 教练模型' },
-    { q: '如果1-10分评估你解决问题的意愿，几分？什么能让它再加1分？', framework: '教练·意愿刻度', source: '焦点解决疗法' },
-    { q: '本周你对自己说了什么「不可能」？那个不可能是真的不可能，还是只是没试过？', framework: '教练·限制性信念', source: 'ICF 教练模型' },
-    { q: '如果下周只做一件事来推进这个目标，那是什么？', framework: '教练·最小行动', source: 'ICF 教练模型' },
-  ] as const,
-
-  '富兰克林美德': [
-    { q: '本周我在节制（饮食、情绪、言语）上表现如何？', framework: '美德·节制', source: 'Benjamin Franklin' },
-    { q: '本周我有没有沉默是金的时刻？说了不该说的话吗？', framework: '美德·沉默', source: 'Benjamin Franklin' },
-    { q: '本周我做事有没有条理？有没有在混乱中浪费时间？', framework: '美德·秩序', source: 'Benjamin Franklin' },
-    { q: '本周我许下的承诺都兑现了吗？', framework: '美德·决心', source: 'Benjamin Franklin' },
-    { q: '本周我有没有在消费上做到节俭？钱花在了真正重要的地方吗？', framework: '美德·节俭', source: 'Benjamin Franklin' },
-    { q: '本周我有没有勤奋地投入重要的事，而不是忙于琐碎？', framework: '美德·勤勉', source: 'Benjamin Franklin' },
-    { q: '本周我有没有对人不真诚？有没有该说真话的时候选择了沉默？', framework: '美德·真诚', source: 'Benjamin Franklin' },
-    { q: '本周我有没有行善？哪怕是很小的善意？', framework: '美德·公正', source: 'Benjamin Franklin' },
-    { q: '本周我有没有做到适度？在饮食、娱乐、工作中有没有走极端？', framework: '美德·适度', source: 'Benjamin Franklin' },
-    { q: '本周我有没有保持整洁？居住环境、数字空间、思维？', framework: '美德·整洁', source: 'Benjamin Franklin' },
-    { q: '本周我有没有让自己平静下来，而不是被激怒或焦虑牵着走？', framework: '美德·宁静', source: 'Benjamin Franklin' },
-    { q: '本周我有没有坚守贞洁（对自己的身体和亲密关系保持尊重）？', framework: '美德·贞洁', source: 'Benjamin Franklin' },
-    { q: '本周我有没有学习或模仿别人的优点？', framework: '美德·谦逊', source: 'Benjamin Franklin' },
-  ] as const,
-
   '关系复盘': [
-    { q: '本周我和谁的关系有了正向进展？是什么促成的？', framework: '关系·正向变化', source: 'Gottman 亲密关系' },
-    { q: '本周我在哪段关系里感到了不舒服？那种不舒服是什么？', framework: '关系·不适觉察', source: 'Gottman 亲密关系' },
-    { q: '本周我有没有主动表达过欣赏或感谢？对方的反应如何？', framework: '关系·欣赏表达', source: 'Gottman 亲密关系' },
-    { q: '本周我有没有在某个对话中「赢了争论但输了关系」？', framework: '关系·沟通代价', source: 'Gottman 亲密关系' },
-    { q: '本周我对家人/亲密的人说了什么让我后悔的话？如果重来，我会怎么表达？', framework: '关系·语言修复', source: '非暴力沟通' },
-    { q: '本周我有没有把自己的需求说出来，而不是期待对方猜到？', framework: '关系·需求表达', source: '非暴力沟通' },
-    { q: '本周我在关系中的边界感如何？有没有过度付出或过度退让？', framework: '关系·边界', source: '非暴力沟通' },
+    { q: '本周我和谁的关系有了进展？', framework: '关系·进展' },
+    { q: '本周我如何在沟通上做出了调整？', framework: '关系·沟通' },
+    { q: '本周我想对谁表达感谢？为什么？', framework: '关系·感恩' },
+  ] as const,
+  'Ryff幸福六维': [
+    { q: '本周我在自我接纳方面做得如何？有没有对自己更宽容一点？', framework: 'Ryff·自我接纳' },
+    { q: '本周我与他人的关系是否让我感到温暖和支持？', framework: 'Ryff·积极关系' },
+    { q: '本周我是否感到自己在持续成长，而不是停滞不前？', framework: 'Ryff·个人成长' },
+    { q: '本周我的生活是否有方向感和意义感？', framework: 'Ryff·生活目的' },
+    { q: '本周我是否觉得自己有能力应对生活的挑战？', framework: 'Ryff·环境掌控' },
+    { q: '本周我是否在按自己的价值观生活，而不是随波逐流？', framework: 'Ryff·自主性' },
+  ] as const,
+  '教练式发问': [
+    { q: '如果下周只能专注一件事，那会是什么？', framework: '教练·聚焦' },
+    { q: '本周我在哪个时刻最有能量？那个时刻有什么共同点？', framework: '教练·能量' },
+    { q: '如果我最好的朋友遇到和我一样的情况，我会建议她/他怎么做？', framework: '教练·换位' },
+    { q: '本周有什么事我一直在拖延？拖延背后真正的原因是什么？', framework: '教练·拖延' },
+    { q: '我在用「没时间」还是「不是优先级」来解释自己的选择？', framework: '教练·优先级' },
+  ] as const,
+  '富兰克林美德': [
+    { q: '本周我在「节制」方面做得如何？有没有在饮食、情绪或言语上过度？', framework: '美德·节制' },
+    { q: '本周我是否做到了「沉默」——只说有益的话，避免闲聊？', framework: '美德·沉默' },
+    { q: '本周我在「秩序」方面如何？生活和工作的条理性有没有改善？', framework: '美德·秩序' },
+    { q: '本周我是否做到了「决心」——决定了就去做？', framework: '美德·决心' },
+    { q: '本周我在「节俭」方面做得如何？消费是否合理？', framework: '美德·节俭' },
+    { q: '本周我是否保持了「勤勉」——不浪费时间，专注于重要的事？', framework: '美德·勤勉' },
+    { q: '本周我在「真诚」方面如何？有没有言行不一致的地方？', framework: '美德·真诚' },
   ] as const,
 } as const;
+
+// ── 自动轮换 key 列表（用于按天/周轮换 set）──
+export const DAILY_SET_KEYS = Object.keys(DAILY_QUESTION_SETS) as string[];
+export const WEEKLY_SET_KEYS = Object.keys(WEEKLY_QUESTION_SETS) as string[];
 
 export type DailySetKey = keyof typeof DAILY_QUESTION_SETS;
 export type WeeklySetKey = keyof typeof WEEKLY_QUESTION_SETS;
 
-export const DAILY_SET_KEYS = Object.keys(DAILY_QUESTION_SETS) as DailySetKey[];
-export const WEEKLY_SET_KEYS = Object.keys(WEEKLY_QUESTION_SETS) as WeeklySetKey[];
+// ── 兼容旧代码：DAILY_QUESTIONS 取第一套的全量题 ──
+export const DAILY_QUESTIONS = DAILY_QUESTION_SETS['自我觉察'];
+export const WEEKLY_QUESTIONS = WEEKLY_QUESTION_SETS['KPT复盘'];
 
 export const DEFAULT_GOALS = [
   { title: '冥想习惯养成', desc: '每天冥想10分钟，连续30天', progress: 0, color: '#5BAD6F', dimension: 'energy', year: new Date().getFullYear(),
