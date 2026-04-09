@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import type { TodayRecord, Quote, LibraryItem } from '../types';
-import { QUOTES, DAILY_QUESTIONS } from '../lib/constants';
+import { QUOTES, DAILY_QUESTION_SETS, DAILY_SET_KEYS } from '../lib/constants';
 import { formatDate, getGreeting, formatDateCN } from '../lib/utils';
 import { getItem, setItem } from '../lib/storage';
 
@@ -13,9 +13,11 @@ export function useToday() {
   const greeting = getGreeting(date.getHours());
   const dateCN = formatDateCN(todayStr);
 
-  const todayQ = DAILY_QUESTIONS[
-    Math.floor((date.getTime() - new Date(date.getFullYear(), 0, 0).getTime()) / 86400000) % DAILY_QUESTIONS.length
-  ];
+  // 从当前用户选择的 set 里取每日一问
+  const activeSetKey = (getItem('life-os-reflect-daily-set') as keyof typeof DAILY_QUESTION_SETS) || DAILY_SET_KEYS[0];
+  const questions = DAILY_QUESTION_SETS[activeSetKey] || DAILY_QUESTION_SETS[DAILY_SET_KEYS[0]];
+  const dayOfYear = Math.floor((date.getTime() - new Date(date.getFullYear(), 0, 0).getTime()) / 86400000);
+  const todayQ = questions[dayOfYear % questions.length];
 
   const quoteIndex = Math.floor(
     (date.getTime() - new Date(date.getFullYear(), 0, 0).getTime()) / 86400000

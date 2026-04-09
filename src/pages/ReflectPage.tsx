@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { ChevronLeft, ChevronRight, CalendarDays, Save, BookOpen } from 'lucide-react';
-import { DAILY_QUESTION_SETS, WEEKLY_QUESTION_SETS, type DailySetKey, type WeeklySetKey } from '../lib/constants';
+import { ChevronLeft, ChevronRight, CalendarDays, Save, BookOpen, RefreshCw, Shuffle } from 'lucide-react';
+import { DAILY_QUESTION_SETS, WEEKLY_QUESTION_SETS, DAILY_SET_KEYS, WEEKLY_SET_KEYS, type DailySetKey, type WeeklySetKey } from '../lib/constants';
 import { formatDate } from '../lib/utils';
 import { getItem, setItem } from '../lib/storage';
 
@@ -158,18 +158,36 @@ function CalendarPicker({
 // ── Question Set 存储键 ──
 const DAILY_SET_KEY = 'life-os-reflect-daily-set';
 const WEEKLY_SET_KEY = 'life-os-reflect-weekly-set';
+const AUTO_ROTATE_KEY = 'life-os-reflect-auto-rotate';
+
+// ── 自动轮换：按日期自动切换 set ──
+
+function getAutoDailySet(dateStr: string): DailySetKey {
+  const d = new Date(dateStr + 'T00:00:00');
+  const dayOfYear = Math.floor((d.getTime() - new Date(d.getFullYear(), 0, 0).getTime()) / 86400000);
+  return DAILY_SET_KEYS[dayOfYear % DAILY_SET_KEYS.length];
+}
+
+function getAutoWeeklySet(dateStr: string): WeeklySetKey {
+  const d = new Date(dateStr + 'T00:00:00');
+  const dow = d.getDay() || 7;
+  const weekOfMonth = Math.floor((d.getDate() - 1) / 7);
+  const monthOffset = d.getFullYear() * 12 + d.getMonth();
+  return WEEKLY_SET_KEYS[(monthOffset + weekOfMonth) % WEEKLY_SET_KEYS.length];
+}
 
 function getDailyQuestions(dateStr: string, setKey: DailySetKey) {
   const questions = DAILY_QUESTION_SETS[setKey];
   const d = new Date(dateStr + 'T00:00:00');
   const dayOfYear = Math.floor((d.getTime() - new Date(d.getFullYear(), 0, 0).getTime()) / 86400000);
-  // 每天展示 set 中 4 个不同的问题（轮询）
+  // 每天展示 4 个不同的问题（轮询），步长确保覆盖面
   const count = questions.length;
+  const step = Math.max(1, Math.floor(count / 4));
   const indices = [
     dayOfYear % count,
-    (dayOfYear + 2) % count,
-    (dayOfYear + 4) % count,
-    (dayOfYear + 6) % count,
+    (dayOfYear + step) % count,
+    (dayOfYear + step * 2) % count,
+    (dayOfYear + step * 3) % count,
   ];
   return indices.map(i => questions[i]);
 }
@@ -254,15 +272,44 @@ function DateSelector({
 export default function ReflectPage() {
   const todayStr = formatDate(new Date());
 
+  // ── 自动轮换开关 ──
+  const [autoRotate, setAutoRotate] = useState<boolean>(() => {
+    const saved = getItem(AUTO_ROTATE_KEY);
+    return saved === 'true';
+  });
+
+  useEffect(() => {
+    setItem(AUTO_ROTATE_KEY, String(autoRotate));
+  }, [autoRotate]);
+
   // ── Question Set 选择 ──
   const [dailySet, setDailySet] = useState<DailySetKey>(() => {
+    if (getItem(AUTO_ROTATE_KEY) === 'true') {
+      return getAutoDailySet(todayStr);
+    }
     const saved = getItem(DAILY_SET_KEY) as DailySetKey | null;
-    return (saved && saved in DAILY_QUESTION_SETS) ? saved : '自我觉察';
+    return (saved && saved in DAILY_QUESTION_SETS) ? saved : DAILY_SET_KEYS[0];
   });
   const [weeklySet, setWeeklySet] = useState<WeeklySetKey>(() => {
+    if (getItem(AUTO_ROTATE_KEY) === 'true') {
+      return getAutoWeeklySet(todayStr);
+    }
     const saved = getItem(WEEKLY_SET_KEY) as WeeklySetKey | null;
-    return (saved && saved in WEEKLY_QUESTION_SETS) ? saved : 'KPT复盘';
+    return (saved && saved in WEEKLY_QUESTION_SETS) ? saved : WEEKLY_SET_KEYS[0];
   });
+
+  // 自动轮换时，日期变化自动切换 set
+  useEffect(() => {
+    if (autoRotate) {
+      setDailySet(getAutoDailySet(dailyDate));
+    }
+  }, [autoRotate, dailyDate]);
+
+  useEffect(() => {
+    if (autoRotate) {
+      setWeeklySet(getAutoWeeklySet(weeklyDate));
+    }
+  }, [autoRotate, weeklyDate]);
 
   // ---- Daily Reflection ----
   const [dailyDate, setDailyDate] = useState(todayStr);
@@ -273,12 +320,12 @@ export default function ReflectPage() {
   const [dailySaved, setDailySaved] = useState(false);
 
   useEffect(() => {
-    setItem(DAILY_SET_KEY, dailySet);
-  }, [dailySet]);
+    if (!autoRotate) setItem(DAILY_SET_KEY, dailySet);
+  }, [dailySet, autoRotate]);
 
   useEffect(() => {
-    setItem(WEEKLY_SET_KEY, weeklySet);
-  }, [weeklySet]);
+    if (!autoRotate) setItem(WEEKLY_SET_KEY, weeklySet);
+  }, [weeklySet, autoRotate]);
 
   useEffect(() => {
     const stored = loadReflectAnswers(REFLECT_DAILY_PREFIX + dailyDate);
@@ -345,15 +392,28 @@ export default function ReflectPage() {
           <div className="flex items-center gap-2">
             <BookOpen className="w-3.5 h-3.5 text-[var(--accent)]" />
             <h2 className="section-title text-[var(--accent)]">Daily Reflection</h2>
+            {/* 自动轮换开关 */}
+            <button
+              onClick={() => setAutoRotate(!autoRotate)}
+              className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium transition-all ${
+                autoRotate
+                  ? 'bg-[var(--accent)] text-white'
+                  : 'bg-[var(--bg-subtle)] text-[var(--text-muted)] hover:text-[var(--text-secondary)]'
+              }`}
+              title={autoRotate ? '自动轮换：每天切换不同反思体系' : '手动模式：自己选择反思体系'}
+            >
+              <Shuffle className="w-3 h-3" />
+              {autoRotate ? '自动轮换' : '手动'}
+            </button>
           </div>
-          {/* Set 选择器 */}
+          {/* Set 选择器 + 日期 + 保存 */}
           <div className="flex items-center gap-2">
-            <div className="flex gap-1 bg-[var(--bg-subtle)] rounded-lg p-0.5">
-              {(Object.keys(DAILY_QUESTION_SETS) as DailySetKey[]).map((s) => (
+            <div className="flex gap-1 bg-[var(--bg-subtle)] rounded-lg p-0.5 flex-wrap">
+              {DAILY_SET_KEYS.map((s) => (
                 <button
                   key={s}
-                  onClick={() => setDailySet(s)}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${dailySet === s ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'}`}
+                  onClick={() => { setDailySet(s); if (autoRotate) setAutoRotate(false); }}
+                  className={`px-2 py-1 rounded-md text-[10px] font-medium transition-all whitespace-nowrap ${dailySet === s ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'}`}
                 >
                   {s}
                 </button>
@@ -400,9 +460,16 @@ export default function ReflectPage() {
             <div key={i} className="rounded-xl p-5 bg-[var(--bg-subtle)] border-l-[3px]" style={{ borderColor: 'var(--accent)' }}>
               <div className="flex items-start justify-between mb-3">
                 <div className="text-[15px] font-medium text-[var(--text-primary)] leading-[1.6]">{item.q}</div>
-                <span className="inline-block text-[10px] px-2 py-1 rounded font-medium uppercase tracking-wide shrink-0 ml-3" style={{ background: 'rgba(201,169,110,0.1)', color: 'var(--accent-dark)' }}>
-                  {item.framework}
-                </span>
+                <div className="flex flex-col items-end gap-1 shrink-0 ml-3">
+                  <span className="inline-block text-[10px] px-2 py-0.5 rounded font-medium" style={{ background: 'rgba(201,169,110,0.1)', color: 'var(--accent-dark)' }}>
+                    {item.framework}
+                  </span>
+                  {item.source && (
+                    <span className="text-[9px] text-[var(--text-muted)] opacity-70">
+                      {item.source}
+                    </span>
+                  )}
+                </div>
               </div>
               <textarea
                 className="today-textarea w-full"
@@ -425,12 +492,12 @@ export default function ReflectPage() {
           </div>
           {/* Set 选择器 */}
           <div className="flex items-center gap-2">
-            <div className="flex gap-1 bg-[var(--bg-subtle)] rounded-lg p-0.5">
-              {(Object.keys(WEEKLY_QUESTION_SETS) as WeeklySetKey[]).map((s) => (
+            <div className="flex gap-1 bg-[var(--bg-subtle)] rounded-lg p-0.5 flex-wrap">
+              {WEEKLY_SET_KEYS.map((s) => (
                 <button
                   key={s}
-                  onClick={() => setWeeklySet(s)}
-                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${weeklySet === s ? 'bg-[var(--info)] text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'}`}
+                  onClick={() => { setWeeklySet(s); if (autoRotate) setAutoRotate(false); }}
+                  className={`px-2 py-1 rounded-md text-[10px] font-medium transition-all whitespace-nowrap ${weeklySet === s ? 'bg-[var(--info)] text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'}`}
                 >
                   {s}
                 </button>
@@ -458,9 +525,16 @@ export default function ReflectPage() {
             <div key={i} className="rounded-xl p-5 bg-[var(--bg-subtle)] border-l-[3px]" style={{ borderColor: 'var(--info)' }}>
               <div className="flex items-start justify-between mb-3">
                 <div className="text-[15px] font-medium text-[var(--text-primary)] leading-[1.6]">{item.q}</div>
-                <span className="inline-block text-[10px] px-2 py-1 rounded font-medium uppercase tracking-wide shrink-0 ml-3" style={{ background: 'rgba(91,155,213,0.1)', color: 'var(--info)' }}>
-                  {item.framework}
-                </span>
+                <div className="flex flex-col items-end gap-1 shrink-0 ml-3">
+                  <span className="inline-block text-[10px] px-2 py-0.5 rounded font-medium" style={{ background: 'rgba(91,155,213,0.1)', color: 'var(--info)' }}>
+                    {item.framework}
+                  </span>
+                  {item.source && (
+                    <span className="text-[9px] text-[var(--text-muted)] opacity-70">
+                      {item.source}
+                    </span>
+                  )}
+                </div>
               </div>
               <textarea
                 className="today-textarea w-full"
