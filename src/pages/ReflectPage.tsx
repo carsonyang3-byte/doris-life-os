@@ -290,11 +290,14 @@ export default function ReflectPage() {
   });
 
   // 自动轮换模式下，根据日期决定 set
+  // ---- Daily/Weekly Date（必须在 effectiveDailySet 之前声明，避免 TDZ 错误）----
+  const [dailyDate, setDailyDate] = useState(todayStr);
+  const [weeklyDate, setWeeklyDate] = useState(todayStr);
+
   const effectiveDailySet = autoDaily ? getAutoDailySet(dailyDate) : dailySet;
   const effectiveWeeklySet = autoWeekly ? getAutoWeeklySet(weeklyDate) : weeklySet;
 
   // ---- Daily Reflection ----
-  const [dailyDate, setDailyDate] = useState(todayStr);
   const isDailyToday = dailyDate === todayStr;
 
   const dailyQuestions = useMemo(() => getDailyQuestions(dailyDate, effectiveDailySet), [dailyDate, effectiveDailySet]);
@@ -345,7 +348,6 @@ export default function ReflectPage() {
   }, [dailySaved]);
 
   // ---- Weekly Reflection ----
-  const [weeklyDate, setWeeklyDate] = useState(todayStr);
   const weekKey = useMemo(() => getWeekKey(new Date(weeklyDate + 'T00:00:00')), [weeklyDate]);
 
   const weeklyQuestions = useMemo(() => getWeeklyQuestions(weeklyDate, effectiveWeeklySet), [weeklyDate, effectiveWeeklySet]);
