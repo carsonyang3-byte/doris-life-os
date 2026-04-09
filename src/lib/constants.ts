@@ -91,13 +91,51 @@ export const WEEKLY_QUESTIONS = [
   { q: '本周有没有什么是我想做但一直没做的？为什么？', framework: 'Avoidance' },
 ] as const;
 
+// ── 多套反思问题集 ──
+export const DAILY_QUESTION_SETS = {
+  '自我觉察': DAILY_QUESTIONS,
+  '感恩日记': [
+    { q: '今天最让我心存感激的一件事是什么？', framework: 'Gratitude' },
+    { q: '今天有谁的出现让我感到温暖？', framework: 'Relationships' },
+    { q: '今天有什么小事顺利进行，让我感到轻松？', framework: 'Small Wins' },
+    { q: '今天我照顾自己的方式是？', framework: 'Self-Care' },
+  ] as const,
+  '身体对话': [
+    { q: '今天我的身体哪个部位最放松？', framework: 'Body Scan' },
+    { q: '今天我的身体发出了什么信号？', framework: 'Body Signals' },
+    { q: '今天我吃了什么，身体感觉如何？', framework: 'Nutrition' },
+    { q: '今天我的能量水平如何？', framework: 'Energy' },
+  ] as const,
+  '情绪记录': [
+    { q: '今天最强烈的情绪是什么？', framework: 'Emotion' },
+    { q: '这个情绪在告诉我什么？', framework: 'Emotion Message' },
+    { q: '今天我如何回应了自己的情绪？', framework: 'Response' },
+    { q: '如果用一种颜色形容今天的心情，是什么？', framework: 'Mood Color' },
+  ] as const,
+} as const;
+
+export const WEEKLY_QUESTION_SETS = {
+  'KPT复盘': WEEKLY_QUESTIONS,
+  '成长复盘': [
+    { q: '本周我最大的成长是什么？', framework: 'Growth' },
+    { q: '本周我在认知上有什么新发现？', framework: 'Insight' },
+    { q: '本周我对自己有什么新的理解？', framework: 'Self-Understanding' },
+  ] as const,
+  '关系复盘': [
+    { q: '本周我和谁的关系有了进展？', framework: 'Relationships' },
+    { q: '本周我如何在沟通上做出了调整？', framework: 'Communication' },
+    { q: '本周我想对谁表达感谢？为什么？', framework: 'Gratitude' },
+  ] as const,
+} as const;
+
+export type DailySetKey = keyof typeof DAILY_QUESTION_SETS;
+export type WeeklySetKey = keyof typeof WEEKLY_QUESTION_SETS;
+
 export const DEFAULT_GOALS = [
   { title: '冥想习惯养成', desc: '每天冥想10分钟，连续30天', progress: 0, color: '#5BAD6F', dimension: 'energy', year: new Date().getFullYear(),
     autoCalc: { type: 'habit_rate' as const, habit: '冥想', windowDays: 30 } },
   { title: '读完12本书', desc: '每月1本，涵盖心理学/健康/AI', progress: 0, color: '#5B9BD5', dimension: 'growth', year: new Date().getFullYear(),
     autoCalc: { type: 'library_count' as const, itemType: 'book' as const, statusFilter: 'completed', target: 12 } },
-  { title: '副业收入5000/月', desc: 'AI相关项目或内容创作', progress: 0, color: '#C9A96E', dimension: 'workMoney', year: new Date().getFullYear(),
-    autoCalc: { type: 'money_monthly' as const, category: 'freelance', direction: 'income' as const, target: 5000 } },
   { title: '体重管理', desc: '达到目标BMI范围并维持', progress: 0, color: '#E8963F', dimension: 'energy', year: new Date().getFullYear() },
 ] as const;
 

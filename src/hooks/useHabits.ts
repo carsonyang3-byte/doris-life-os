@@ -131,15 +131,20 @@ export function useHabits() {
     setData({ ...current });
   }, []);
 
-  const getStreak = useCallback(() => {
+  // 通用连续天数计算：从昨天开始算（如果今天已打卡则从今天算）
+  const getHabitStreak = useCallback((habitName: string): number => {
     const all = loadHabitData();
     const today = new Date();
     let streak = 0;
-    for (let i = 0; i < 365; i++) {
+    // 如果今天已打卡，从今天开始算；否则从昨天开始
+    const todayStr = formatDate(today);
+    const startFromYesterday = !all[todayStr]?.[habitName];
+    const startOffset = startFromYesterday ? 1 : 0;
+    for (let i = startOffset; i < 365; i++) {
       const d = new Date(today);
       d.setDate(d.getDate() - i);
       const dateStr = formatDate(d);
-      if (all[dateStr]?.['冥想']) {
+      if (all[dateStr]?.[habitName]) {
         streak++;
       } else {
         break;
@@ -147,6 +152,9 @@ export function useHabits() {
     }
     return streak;
   }, []);
+
+  // 兼容旧接口
+  const getStreak = useCallback(() => getHabitStreak('冥想'), [getHabitStreak]);
 
   const getJournalDays = useCallback(() => {
     let count = 0;
@@ -158,13 +166,17 @@ export function useHabits() {
     return count;
   }, []);
 
-  const getExerciseCount = useCallback(() => {
+  // 通用年度习惯计数
+  const getHabitYearlyCount = useCallback((habitName: string): number => {
     const all = loadHabitData();
     const year = new Date().getFullYear();
     return Object.entries(all)
       .filter(([dateStr]) => dateStr.startsWith(String(year)))
-      .filter(([, h]) => h['运动']).length;
+      .filter(([, h]) => h[habitName]).length;
   }, []);
+
+  // 兼容旧接口
+  const getExerciseCount = useCallback(() => getHabitYearlyCount('运动'), [getHabitYearlyCount]);
 
   const getHeatmapData = useCallback(() => {
     const all = loadHabitData();
@@ -190,8 +202,10 @@ export function useHabits() {
     removeHabit,
     renameHabit,
     getStreak,
+    getHabitStreak,
     getJournalDays,
     getExerciseCount,
+    getHabitYearlyCount,
     getHeatmapData,
   };
 }

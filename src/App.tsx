@@ -9,6 +9,7 @@ import MoneyPage from './pages/MoneyPage';
 import JournalPage from './pages/JournalPage';
 import TravelPage from './pages/TravelPage';
 import SettingsPage from './pages/SettingsPage';
+import { VisionEngineProvider } from './hooks/useVisionEngineContext';
 import type { PageType } from './types';
 import { formatDateCN } from './lib/utils';
 import {
@@ -77,16 +78,18 @@ function App() {
 
   // ---- Main App ----
   return (
-    <Layout activePage={activePage} onPageChange={setActivePage}>
-      {activePage === 'dashboard' && <DashboardPage onPageChange={setActivePage} />}
-      {activePage === 'reflect' && <ReflectPage />}
-      {activePage === 'goals' && <GoalsPage />}
-      {activePage === 'library' && <LibraryPage />}
-      {activePage === 'money' && <MoneyPage />}
-      {activePage === 'journal' && <JournalPage />}
-      {activePage === 'travel' && <TravelPage />}
-      {activePage === 'settings' && <SettingsPage />}
-    </Layout>
+    <VisionEngineProvider>
+      <Layout activePage={activePage} onPageChange={setActivePage}>
+        {activePage === 'dashboard' && <DashboardPage onPageChange={setActivePage} />}
+        {activePage === 'reflect' && <ReflectPage />}
+        {activePage === 'goals' && <GoalsPage />}
+        {activePage === 'library' && <LibraryPage />}
+        {activePage === 'money' && <MoneyPage />}
+        {activePage === 'journal' && <JournalPage />}
+        {activePage === 'travel' && <TravelPage />}
+        {activePage === 'settings' && <SettingsPage />}
+      </Layout>
+    </VisionEngineProvider>
   );
 }
 

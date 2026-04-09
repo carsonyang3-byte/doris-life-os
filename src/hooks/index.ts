@@ -11,3 +11,4 @@ export { useTravel } from './useTravel';
 export { useAIInsight } from './useAIInsight';
 export type { InsightTab } from './useAIInsight';
 export { useVisionEngine } from './useVisionEngine';
+export { VisionEngineProvider, useVisionEngineShared } from './useVisionEngineContext';

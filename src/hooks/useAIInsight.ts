@@ -70,24 +70,76 @@ function collectUserData(perspective: InsightTab): string {
     }
   }
 
-  // Reflect 觉察记录（最近或本月）
+  // Reflect 觉察记录（扫描新格式 daily + weekly keys）
   if (perspective !== 'finance') {
-    const reflectAll: { date: string; q: string; framework: string; answer: string }[] = JSON.parse(
-      getItem('life-os-reflect') || '[]'
-    );
-    if (perspective === 'recent') {
-      const recent7Date = new Date(today);
-      recent7Date.setDate(recent7Date.getDate() - 7);
-      const filtered = reflectAll.filter((r) => new Date(r.date) >= recent7Date && r.answer?.trim());
-      if (filtered.length) {
-        lines.push(`【近7天觉察回答（${filtered.length}条）】\n${filtered.map((r) => `${r.date} [${r.framework}] ${r.q}\n答：${r.answer.slice(0, 200)}`).join('\n')}`);
+    const recent7Date = new Date(today);
+    recent7Date.setDate(recent7Date.getDate() - 7);
+    const recentCutoff = recent7Date.toISOString().slice(0, 10);
+    const monthKey5 = todayStr.slice(0, 7);
+    const reflectResults: { date: string; q: string; framework: string; answer: string }[] = [];
+
+    // 扫描 daily keys
+    for (let i = 0; i < 31; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const ds = d.toISOString().slice(0, 10);
+      const raw = getItem('life-os-reflect-daily-' + ds);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          // 新格式：parsed = { "问题1": "回答1", "问题2": "回答2" }，需要读取对应的 framework
+          if (parsed && typeof parsed === 'object') {
+            const framework = parsed._framework || 'Daily';
+            for (const [q, answer] of Object.entries(parsed)) {
+              if (q === '_framework') continue;
+              if (typeof answer === 'string' && answer.trim()) {
+                reflectResults.push({ date: ds, q, framework, answer: answer.slice(0, 200) });
+              }
+            }
+          }
+        } catch { /* skip */ }
       }
-    } else {
-      const monthKey2 = todayStr.slice(0, 7);
-      const filtered = reflectAll.filter((r) => r.date.startsWith(monthKey2) && r.answer?.trim());
-      if (filtered.length) {
-        lines.push(`【本月觉察回答（${filtered.length}条）】\n${filtered.map((r) => `[${r.framework}] ${r.q}\n答：${r.answer.slice(0, 150)}`).join('\n')}`);
+    }
+
+    // 扫描 weekly keys（最近8周）
+    for (let i = 0; i < 8; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i * 7);
+      const dow = d.getDay() || 7;
+      const monday = new Date(d);
+      monday.setDate(d.getDate() - dow + 1);
+      const weekYear = monday.getFullYear();
+      const weekNum = Math.ceil(((monday.getTime() - new Date(weekYear, 0, 4).getTime()) / 86400000 + 4) / 7);
+      const weekKey = `${weekYear}-W${String(weekNum).padStart(2, '0')}`;
+      const raw = getItem('life-os-reflect-weekly-' + weekKey);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object') {
+            const framework = parsed._framework || 'Weekly';
+            for (const [q, answer] of Object.entries(parsed)) {
+              if (q === '_framework') continue;
+              if (typeof answer === 'string' && answer.trim()) {
+                reflectResults.push({ date: weekKey, q, framework, answer: answer.slice(0, 200) });
+              }
+            }
+          }
+        } catch { /* skip */ }
       }
+    }
+
+    // 按 perspective 过滤
+    const filtered = reflectResults.filter((r) => {
+      if (perspective === 'recent') {
+        return r.date >= recentCutoff && r.answer?.trim();
+      } else {
+        return r.date.startsWith(monthKey5) || r.date.startsWith(monthKey5.slice(0, 4));
+      }
+    });
+
+    if (filtered.length) {
+      const label = perspective === 'recent' ? `近7天觉察回答（${filtered.length}条）` : `本月觉察回答（${filtered.length}条）`;
+      lines.push(`【${label}】\n${filtered.map((r) => `${r.date} [${r.framework}] ${r.q}\n答：${r.answer}`).join('\n')}`);
     }
   }
 

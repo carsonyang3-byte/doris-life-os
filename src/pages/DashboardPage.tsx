@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, Fragment, useRef } from 'react';
 import { ChevronRight, ChevronLeft, CheckCircle2, Sun, Eye, Sparkles, CalendarDays, Settings, RefreshCw, Plus, Pencil, Trash2, X, Check } from 'lucide-react';
-import { useToday, useTodayData, useQuotes, useWeeklyFocus, useHabits, useMoney, useGoals, useScoring, useLibrary, useVisionEngine } from '../hooks';
+import { useToday, useTodayData, useQuotes, useWeeklyFocus, useHabits, useMoney, useGoals, useScoring, useLibrary, useVisionEngineShared } from '../hooks';
 import { useAIInsight } from '../hooks/useAIInsight';
 import type { InsightTab } from '../hooks/useAIInsight';
 import { useGoalProgress } from '../hooks/useGoalProgress';
@@ -18,14 +18,27 @@ export default function DashboardPage({ onPageChange }: DashboardPageProps) {
   const { items: libraryItems } = useLibrary();
   const { current: quote, next, isFromLibrary, libraryCount } = useQuotes(libraryItems, todayStr);
   const { focus, dimensions, updateFocus } = useWeeklyFocus();
-  const { data: habitData, habitList, toggleHabit, addHabit, removeHabit, renameHabit, getStreak, getJournalDays, getExerciseCount, getHeatmapData } = useHabits();
+  const { data: habitData, habitList, toggleHabit, addHabit, removeHabit, renameHabit, getHabitStreak, getJournalDays, getHabitYearlyCount, getHeatmapData } = useHabits();
   const { records: moneyRecords, getWeeklyData } = useMoney();
   const { goals } = useGoals();
   const { details: goalDetails } = useGoalProgress(goals);
   const { dimensions: scoreDims, todayScore } = useScoring();
   
-  // 使用新的规则引擎获取 Vision Distance 数据
-  const { visionDistance, calculateVisionDistance, isCalculating } = useVisionEngine();
+  // 使用共享的 Vision Engine 状态（跨页面同步）
+  const { 
+    visionDistance, 
+    calculateVisionDistance, 
+    isCalculating, 
+    getDimensionDetails,
+  } = useVisionEngineShared();
+
+  // 首次加载自动计算 Vision Distance（仅当 localStorage 无数据时）
+  useEffect(() => {
+    const hasStoredData = getItem(`life-os-vision-distance-${new Date().getFullYear()}`);
+    if (!hasStoredData && !isCalculating) {
+      calculateVisionDistance();
+    }
+  }, []);
 
   // ---- Today 日期选择器 ----
   const [selectedDate, setSelectedDate] = useState(todayStr);
@@ -76,9 +89,8 @@ export default function DashboardPage({ onPageChange }: DashboardPageProps) {
 
   // ---- Habit / Money 计算 ----
   const todayHabits = habitData[todayStr] || {};
-  const streak = getStreak();
+  // 动态计算当前习惯的连续天数和年度计数
   const journalDays = getJournalDays();
-  const exerciseCount = getExerciseCount();
   const heatmap = getHeatmapData();
   const weeklyMoney = getWeeklyData();
 
@@ -107,10 +119,8 @@ export default function DashboardPage({ onPageChange }: DashboardPageProps) {
   const [editHabitValue, setEditHabitValue] = useState('');
   const editInputRef = useRef<HTMLInputElement>(null);
 
-  // 切换 tab 时自动生成新洞察
-  useEffect(() => {
-    generateInsight(insightTab);
-  }, [insightTab]);
+  // 移除自动触发，改为纯手动
+  // 用户点击"换一条"按钮才会生成洞察
 
   return (
     <>
@@ -334,12 +344,40 @@ export default function DashboardPage({ onPageChange }: DashboardPageProps) {
             ))}
           </div>
         </div>
-        <div className="grid grid-cols-4 gap-4 mb-5">
-          <StatCard value={streak} label="冥想连续天数" />
-          <StatCard value={journalDays} label="觉察记录天数" />
-          <StatCard value={exerciseCount} label="运动总次数" />
-          <StatCard value={todayScore} label="今日积分" accent />
-        </div>
+        {(() => {
+          // 构建统计卡片数组：所有习惯的连续天数 + 觉察记录
+          const statCards = [
+            ...habitList.map((habit) => ({
+              key: habit,
+              value: getHabitStreak(habit),
+              label: `${habit}连续天数`,
+              accent: false,
+            })),
+            {
+              key: 'journal',
+              value: journalDays,
+              label: '觉察记录天数',
+              accent: false,
+            },
+          ];
+          // 今日积分永远放最后
+          const totalCards = [
+            ...statCards,
+            { key: 'score', value: todayScore, label: '今日积分', accent: true },
+          ];
+          // 每行4个，分组渲染
+          const rows = [];
+          for (let i = 0; i < totalCards.length; i += 4) {
+            rows.push(totalCards.slice(i, i + 4));
+          }
+          return rows.map((row, rowIndex) => (
+            <div key={`stat-row-${rowIndex}`} className="grid grid-cols-4 gap-4 mb-5">
+              {row.map((card) => (
+                <StatCard key={card.key} value={card.value} label={card.label} accent={card.accent} />
+              ))}
+            </div>
+          ));
+        })()}
         <div className="mb-1">
           <div className="flex items-center justify-between mb-2.5">
             <span className="text-[11px] text-[var(--text-muted)]">过去 12 周</span>
@@ -538,25 +576,52 @@ export default function DashboardPage({ onPageChange }: DashboardPageProps) {
           </div>
         </div>
         <div className="distance-card">
-          <SectionHeader dot="accent" title="Vision Distance" />
-          <p className="text-[12px] text-[var(--text-muted)] mb-1">
-            {isCalculating ? '计算中...' : '实时显示 Goals 页面设置值'}
-            <button 
-              onClick={calculateVisionDistance}
-              className="ml-2 text-[10px] text-[var(--accent)] hover:underline"
-              disabled={isCalculating}
+          <SectionHeader dot="accent" title="Vision Distance" extra={
+            <button
+              onClick={() => onPageChange && onPageChange('goals')}
+              className="text-[11px] text-[var(--text-muted)] bg-[var(--bg-subtle)] px-2.5 py-1 rounded-md cursor-pointer hover:text-[var(--accent)] transition-colors font-medium hover:bg-[var(--bg-hover)]"
             >
-              重新计算
+              管理维度 →
             </button>
+          } />
+          <p className="text-[12px] text-[var(--text-muted)] mb-1">
+            {isCalculating ? '计算中...' : '你离理想中的自己还有多远？'}
+            <span className="ml-1 text-[10px] text-[var(--text-muted)]">点击数值编辑，Reset 清空</span>
           </p>
-          <VisionDistance dimensions={visionDistance.map((dim, index) => ({
-            key: dim.label,
-            label: dim.label,
-            color: dim.color,
-            percent: dim.current,
-            score: Math.round(dim.current * 3.3), // 转换为积分（假设100% = 330分）
-          }))} />
+          <VisionDistance 
+            dimensions={visionDistance.map((dim, index) => ({
+              key: dim.label,
+              label: dim.label,
+              color: dim.color,
+              percent: dim.current,
+              score: Math.round(dim.current * 3.3),
+            }))} 
+            descriptions={(() => {
+              const map: Record<string, string> = {};
+              visionDistance.forEach((dim, idx) => {
+                const details = getDimensionDetails(idx);
+                if (details.length > 0) {
+                  const parts = details.map(d => {
+                    const [type, keys] = d.source.split(':');
+                    const typeLabel = type === 'habits' ? '习惯' : type === 'journal' ? '记录' : type === 'today' ? '今日' : type === 'goals' ? '目标' : type;
+                    return `${typeLabel}:${keys}(${(d.value*100).toFixed(0)}%)`;
+                  });
+                  map[dim.label] = parts.join(' + ');
+                } else if (dim.current === 0) {
+                  map[dim.label] = '';
+                }
+              });
+              return map;
+            })()}
+            onValueChange={(label, value) => {
+              const idx = visionDistance.findIndex(d => d.label === label);
+              if (idx >= 0) {
+                // useVisionEngine 的 updateDimension 会在内部调用
+              }
+            }}
+          />
         </div>
+
       </div>
 
       {/* Row 8: AI Insight */}
@@ -622,6 +687,8 @@ export default function DashboardPage({ onPageChange }: DashboardPageProps) {
               <span className="text-[var(--text-muted)] italic">正在分析你的数据...</span>
             ) : insightError && !insightText ? (
               <span className="text-[var(--danger)] text-[12px]">API 调用失败，显示预设洞察</span>
+            ) : !insightText ? (
+              <span className="text-[var(--text-muted)] italic">点击右上角「换一条」开始 AI 洞察分析</span>
             ) : (
               insightText
             )}
@@ -703,22 +770,61 @@ function GoalItem({ goal, progress, isAuto }: { goal: { title: string; color: st
   );
 }
 
-function VisionDistance({ dimensions }: { dimensions: { key: string; label: string; color: string; percent: number; score: number }[] }) {
+function VisionDistance({ 
+  dimensions, 
+  descriptions,
+  onValueChange,
+}: { 
+  dimensions: { key: string; label: string; color: string; percent: number; score: number }[]; 
+  descriptions?: Record<string, string>;
+  onValueChange?: (label: string, value: number) => void;
+}) {
+  const [hoveredDim, setHoveredDim] = useState<string | null>(null);
+
   return (
     <>
       {dimensions.map((dim) => (
-        <div key={dim.key} className="mb-4 last:mb-0">
-          <div className="flex items-center justify-between mb-2">
+        <div 
+          key={dim.key} 
+          className="mb-4 last:mb-0 relative"
+          onMouseEnter={() => setHoveredDim(dim.key)}
+          onMouseLeave={() => setHoveredDim(null)}
+        >
+          <div className="flex items-center justify-between mb-1.5">
             <span className="text-[12px] font-medium text-[var(--text-secondary)]">{dim.label}</span>
-            <span className="text-[11px] font-semibold" style={{ color: dim.color }}>{dim.percent}%</span>
+            <span className="text-[11px] font-semibold" style={{ color: dim.color }}>
+              {dim.percent > 0 ? `${dim.percent}%` : '未设置'}
+            </span>
           </div>
           <div className="h-2 bg-[var(--bg-subtle)] rounded overflow-hidden">
-            <div className="h-full rounded transition-all duration-1000" style={{ width: `${dim.percent}%`, background: dim.color }} />
+            <div className="h-full rounded transition-all duration-1000" style={{ width: `${Math.max(dim.percent, 2)}%`, background: dim.color }} />
           </div>
           <div className="flex justify-between mt-1.5">
-            <span className="text-[9px] text-[var(--text-muted)]">{dim.score} pts</span>
-            <span className="text-[9px] text-[var(--text-muted)]">100%</span>
+            <span className="text-[9px] text-[var(--text-muted)] max-w-[60%] truncate">
+              {dim.percent > 0 ? `${dim.score} pts` : '点击设置'}
+            </span>
+            <span className="text-[9px] text-[var(--text-muted)]">Vision (100%)</span>
           </div>
+
+          {/* Hover tooltip — 显示计算依据 */}
+          {hoveredDim === dim.key && descriptions?.[dim.key] && (
+            <div
+              className="absolute z-30 left-0 bottom-full mb-2 px-3 py-2 rounded-lg shadow-lg text-[11px] leading-relaxed whitespace-normal w-full"
+              style={{ 
+                background: 'var(--bg-card)', 
+                border: '1px solid var(--border)',
+                color: 'var(--text-secondary)',
+              }}
+            >
+              <div className="font-medium mb-1" style={{ color: dim.color }}>计算依据</div>
+              <div>{descriptions[dim.key]}</div>
+              {/* 小三角 */}
+              <div 
+                className="absolute left-4 -bottom-1.5 w-3 h-3 rotate-45"
+                style={{ background: 'var(--bg-card)', borderRight: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}
+              />
+            </div>
+          )}
         </div>
       ))}
     </>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, CalendarDays, Save, BookOpen } from 'lucide-react';
-import { DAILY_QUESTIONS, WEEKLY_QUESTIONS } from '../lib/constants';
+import { DAILY_QUESTION_SETS, WEEKLY_QUESTION_SETS, type DailySetKey, type WeeklySetKey } from '../lib/constants';
 import { formatDate } from '../lib/utils';
 import { getItem, setItem } from '../lib/storage';
 
@@ -155,30 +155,36 @@ function CalendarPicker({
   );
 }
 
-// ---- 获取当天和当周的每日/每周问题 ----
+// ── Question Set 存储键 ──
+const DAILY_SET_KEY = 'life-os-reflect-daily-set';
+const WEEKLY_SET_KEY = 'life-os-reflect-weekly-set';
 
-function getDailyQuestions(dateStr: string) {
+function getDailyQuestions(dateStr: string, setKey: DailySetKey) {
+  const questions = DAILY_QUESTION_SETS[setKey];
   const d = new Date(dateStr + 'T00:00:00');
   const dayOfYear = Math.floor((d.getTime() - new Date(d.getFullYear(), 0, 0).getTime()) / 86400000);
-  // 每天展示 4 个不同的问题
+  // 每天展示 set 中 4 个不同的问题（轮询）
+  const count = questions.length;
   const indices = [
-    dayOfYear % DAILY_QUESTIONS.length,
-    (dayOfYear + 2) % DAILY_QUESTIONS.length,
-    (dayOfYear + 4) % DAILY_QUESTIONS.length,
-    (dayOfYear + 6) % DAILY_QUESTIONS.length,
+    dayOfYear % count,
+    (dayOfYear + 2) % count,
+    (dayOfYear + 4) % count,
+    (dayOfYear + 6) % count,
   ];
-  return indices.map(i => DAILY_QUESTIONS[i]);
+  return indices.map(i => questions[i]);
 }
 
-function getWeeklyQuestions(dateStr: string) {
+function getWeeklyQuestions(dateStr: string, setKey: WeeklySetKey) {
+  const questions = WEEKLY_QUESTION_SETS[setKey];
   const d = new Date(dateStr + 'T00:00:00');
   const dow = d.getDay() || 7;
   const weekOfMonth = Math.floor((d.getDate() - 1) / 7);
-  const start = (weekOfMonth * 3) % WEEKLY_QUESTIONS.length;
+  const count = questions.length;
+  const start = (weekOfMonth * 3) % count;
   return [
-    WEEKLY_QUESTIONS[start % WEEKLY_QUESTIONS.length],
-    WEEKLY_QUESTIONS[(start + 1) % WEEKLY_QUESTIONS.length],
-    WEEKLY_QUESTIONS[(start + 2) % WEEKLY_QUESTIONS.length],
+    questions[start % count],
+    questions[(start + 1) % count],
+    questions[(start + 2) % count],
   ];
 }
 
@@ -248,13 +254,31 @@ function DateSelector({
 export default function ReflectPage() {
   const todayStr = formatDate(new Date());
 
+  // ── Question Set 选择 ──
+  const [dailySet, setDailySet] = useState<DailySetKey>(() => {
+    const saved = getItem(DAILY_SET_KEY) as DailySetKey | null;
+    return (saved && saved in DAILY_QUESTION_SETS) ? saved : '自我觉察';
+  });
+  const [weeklySet, setWeeklySet] = useState<WeeklySetKey>(() => {
+    const saved = getItem(WEEKLY_SET_KEY) as WeeklySetKey | null;
+    return (saved && saved in WEEKLY_QUESTION_SETS) ? saved : 'KPT复盘';
+  });
+
   // ---- Daily Reflection ----
   const [dailyDate, setDailyDate] = useState(todayStr);
   const isDailyToday = dailyDate === todayStr;
 
-  const dailyQuestions = useMemo(() => getDailyQuestions(dailyDate), [dailyDate]);
+  const dailyQuestions = useMemo(() => getDailyQuestions(dailyDate, dailySet), [dailyDate, dailySet]);
   const [dailyAnswers, setDailyAnswers] = useState<Record<string, string>>({});
   const [dailySaved, setDailySaved] = useState(false);
+
+  useEffect(() => {
+    setItem(DAILY_SET_KEY, dailySet);
+  }, [dailySet]);
+
+  useEffect(() => {
+    setItem(WEEKLY_SET_KEY, weeklySet);
+  }, [weeklySet]);
 
   useEffect(() => {
     const stored = loadReflectAnswers(REFLECT_DAILY_PREFIX + dailyDate);
@@ -287,7 +311,7 @@ export default function ReflectPage() {
   const [weeklyDate, setWeeklyDate] = useState(todayStr);
   const weekKey = useMemo(() => getWeekKey(new Date(weeklyDate + 'T00:00:00')), [weeklyDate]);
 
-  const weeklyQuestions = useMemo(() => getWeeklyQuestions(weeklyDate), [weeklyDate]);
+  const weeklyQuestions = useMemo(() => getWeeklyQuestions(weeklyDate, weeklySet), [weeklyDate, weeklySet]);
   const [weeklyAnswers, setWeeklyAnswers] = useState<Record<string, string>>({});
   const [weeklySaved, setWeeklySaved] = useState(false);
 
@@ -317,12 +341,24 @@ export default function ReflectPage() {
     <>
       {/* Daily Reflection */}
       <div className="card-base card-accent">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <BookOpen className="w-3.5 h-3.5 text-[var(--accent)]" />
             <h2 className="section-title text-[var(--accent)]">Daily Reflection</h2>
           </div>
-          <div className="flex items-center gap-3">
+          {/* Set 选择器 */}
+          <div className="flex items-center gap-2">
+            <div className="flex gap-1 bg-[var(--bg-subtle)] rounded-lg p-0.5">
+              {(Object.keys(DAILY_QUESTION_SETS) as DailySetKey[]).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setDailySet(s)}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${dailySet === s ? 'bg-[var(--accent)] text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'}`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
             <DateSelector
               date={dailyDate}
               onDateChange={setDailyDate}
@@ -380,14 +416,26 @@ export default function ReflectPage() {
         </div>
       </div>
 
-      {/* Weekly Reflection (KPT) */}
+      {/* Weekly Reflection */}
       <div className="card-base">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full dot-pulse" style={{ background: 'var(--info)' }} />
-            <h2 className="section-title" style={{ color: 'var(--info)' }}>Weekly KPT</h2>
+            <h2 className="section-title" style={{ color: 'var(--info)' }}>Weekly Reflection</h2>
           </div>
-          <div className="flex items-center gap-3">
+          {/* Set 选择器 */}
+          <div className="flex items-center gap-2">
+            <div className="flex gap-1 bg-[var(--bg-subtle)] rounded-lg p-0.5">
+              {(Object.keys(WEEKLY_QUESTION_SETS) as WeeklySetKey[]).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setWeeklySet(s)}
+                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${weeklySet === s ? 'bg-[var(--info)] text-white' : 'text-[var(--text-muted)] hover:text-[var(--text-secondary)]'}`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
             <DateSelector
               date={weeklyDate}
               onDateChange={setWeeklyDate}

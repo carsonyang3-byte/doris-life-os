@@ -1,13 +1,14 @@
 import { useState, useMemo } from 'react';
-import { useGoals, useVisionEngine } from '../hooks';
+import { Plus, Trash2, X, ChevronDown, ChevronUp, Check, Settings2 } from 'lucide-react';
+import { useGoals, useVisionEngineShared, useHabits } from '../hooks';
 import { useGoalProgress } from '../hooks/useGoalProgress';
-import type { Goal } from '../types';
+import type { Goal, AutoCalcRule } from '../types';
 
 export default function GoalsPage() {
   const { goals, projects, updateProgress, addGoal, deleteGoal, addProject, deleteProject, updateProjectTitle, updateProjectStatus } = useGoals();
   const { details } = useGoalProgress(goals);
   
-  // 使用新的规则引擎
+  // 使用共享的 Vision Engine 状态（跨页面同步）
   const { 
     year: goalYear, 
     visionDistance, 
@@ -16,8 +17,21 @@ export default function GoalsPage() {
     updateDimension, 
     resetVisionDistance, 
     calculateVisionDistance,
-    isCalculating 
-  } = useVisionEngine();
+    isCalculating,
+    customDimensions,
+    addDimension,
+    removeDimension,
+    updateDimensionSources,
+  } = useVisionEngineShared();
+
+  // 维度管理 Modal 状态
+  const [showDimModal, setShowDimModal] = useState(false);
+  const [newDimInput, setNewDimInput] = useState('');
+  // 展开配置的维度索引
+  const [expandedDimIndex, setExpandedDimIndex] = useState<number | null>(null);
+  
+  // 获取习惯列表用于手动映射
+  const { habitList } = useHabits();
 
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -26,6 +40,14 @@ export default function GoalsPage() {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [editingProjectTitle, setEditingProjectTitle] = useState<string | null>(null);
   const [editProjectValue, setEditProjectValue] = useState('');
+  // 新增目标时的 autoCalc 选择
+  const [newGoalAutoCalcType, setNewGoalAutoCalcType] = useState<string>('none');
+  const [newGoalHabit, setNewGoalHabit] = useState('冥想');
+  const [newGoalWindow, setNewGoalWindow] = useState('30');
+  const [newGoalTarget, setNewGoalTarget] = useState('12');
+  const [newGoalCategory, setNewGoalCategory] = useState('freelance');
+  const [newGoalDirection, setNewGoalDirection] = useState<'income' | 'expense'>('income');
+  const [showNewGoalOptions, setShowNewGoalOptions] = useState(false);
 
   const handleEdit = (index: number) => {
     setEditingIndex(index);
@@ -48,10 +70,26 @@ export default function GoalsPage() {
     }
   };
 
+  const buildAutoCalc = (): Goal['autoCalc'] | undefined => {
+    const target = parseInt(newGoalTarget) || 10;
+    const windowDays = parseInt(newGoalWindow) || 30;
+    switch (newGoalAutoCalcType) {
+      case 'habit_rate': return { type: 'habit_rate', habit: newGoalHabit, windowDays };
+      case 'library_count': return { type: 'library_count', itemType: 'book', statusFilter: 'completed', target };
+      case 'money_monthly': return { type: 'money_monthly', category: newGoalCategory, direction: newGoalDirection, target };
+      case 'journal_monthly': return { type: 'journal_monthly', owner: 'me', target };
+      case 'reflect_monthly': return { type: 'reflect_monthly', target };
+      default: return undefined;
+    }
+  };
+
   const handleAddGoal = () => {
     if (newGoalTitle.trim()) {
-      addGoal(newGoalTitle.trim(), 'Click Edit to update', '#C9A96E', 'growth', goalYear);
+      const autoCalc = buildAutoCalc();
+      addGoal(newGoalTitle.trim(), 'Click Edit to update', '#C9A96E', 'growth', goalYear, autoCalc);
       setNewGoalTitle('');
+      setNewGoalAutoCalcType('none');
+      setShowNewGoalOptions(false);
     }
   };
 
@@ -60,6 +98,41 @@ export default function GoalsPage() {
       addProject(newProjectTitle.trim());
       setNewProjectTitle('');
     }
+  };
+
+  // 切换某个维度中某个习惯的选中状态
+  const toggleHabitMapping = (dimIndex: number, habitName: string) => {
+    const dim = customDimensions[dimIndex];
+    const sources = dim.sources || [];
+    
+    // 找 habits 类型的 source
+    const habitSource = sources.find(s => s.type === 'habits');
+    let newKeys: string[];
+    
+    if (habitSource) {
+      newKeys = habitSource.keys.includes(habitName)
+        ? habitSource.keys.filter(k => k !== habitName)
+        : [...habitSource.keys, habitName];
+      
+      // 如果 keys 为空了，移除这个 source
+      const newSources = newKeys.length > 0
+        ? sources.map(s => s.type === 'habits' ? { ...s, keys: newKeys } : s)
+        : sources.filter(s => s.type !== 'habits');
+      
+      updateDimensionSources(dimIndex, newSources);
+    } else {
+      // 还没有 habits source，新建一个
+      const newSources = [...sources, { type: 'habits' as const, keys: [habitName], weight: 0.5 }];
+      updateDimensionSources(dimIndex, newSources);
+    }
+  };
+
+  // 获取某个维度的手动映射习惯名列表
+  const getMappedHabits = (dimIndex: number): string[] => {
+    const dim = customDimensions[dimIndex];
+    if (!dim.sources) return [];
+    const hs = dim.sources.find(s => s.type === 'habits');
+    return hs?.keys || [];
   };
 
   const handleEditProject = (title: string) => {
@@ -87,7 +160,6 @@ export default function GoalsPage() {
     const defaultGoalsForYear = [
       { title: '冥想习惯养成', desc: '每天冥想10分钟', progress: 0, color: '#5BAD6F', dimension: 'energy' as const, year: goalYear, autoCalc: { type: 'habit_rate' as const, habit: '冥想', windowDays: 30 } },
       { title: '读完12本书', desc: '每月1本', progress: 0, color: '#5B9BD5', dimension: 'growth' as const, year: goalYear, autoCalc: { type: 'library_count' as const, itemType: 'book' as const, statusFilter: 'completed', target: 12 } },
-      { title: '副业收入目标', desc: 'AI相关项目或内容创作', progress: 0, color: '#C9A96E', dimension: 'workMoney' as const, year: goalYear, autoCalc: { type: 'money_monthly' as const, category: 'freelance', direction: 'income' as const, target: 5000 } },
       { title: '体重管理', desc: '达到目标体重', progress: 0, color: '#E8963F', dimension: 'energy' as const, year: goalYear },
     ];
     defaultGoalsForYear.forEach(g => addGoal(g.title, g.desc, g.color, g.dimension, g.year, g.autoCalc));
@@ -247,16 +319,83 @@ export default function GoalsPage() {
             );
           })}
         </div>
-        <div className="flex items-center gap-2 mt-4">
-          <input
-            type="text"
-            className="today-input"
-            placeholder="New goal title..."
-            value={newGoalTitle}
-            onChange={(e) => setNewGoalTitle(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleAddGoal()}
-          />
-          <button onClick={handleAddGoal} className="btn-save">+ Add Goal</button>
+        <div className="flex flex-col gap-2 mt-4">
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              className="today-input"
+              placeholder="New goal title..."
+              value={newGoalTitle}
+              onChange={(e) => setNewGoalTitle(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleAddGoal()}
+            />
+            <button
+              onClick={() => setShowNewGoalOptions(!showNewGoalOptions)}
+              className={`text-[10px] px-2 py-1 rounded-md font-medium transition-colors ${showNewGoalOptions ? 'bg-[var(--success)]/15 text-[var(--success)]' : 'bg-[var(--bg-subtle)] text-[var(--text-muted)] hover:text-[var(--success)]'}`}
+              title="自动计算规则"
+            >
+              Auto
+            </button>
+            <button onClick={handleAddGoal} className="btn-save">+ Add Goal</button>
+          </div>
+          {/* 自动计算选项 */}
+          {showNewGoalOptions && (
+            <div className="p-3 rounded-xl bg-[var(--bg-subtle)] border border-[var(--border)]">
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                <div>
+                  <label className="text-[10px] text-[var(--text-muted)] block mb-1">计算规则</label>
+                  <select
+                    value={newGoalAutoCalcType}
+                    onChange={(e) => setNewGoalAutoCalcType(e.target.value)}
+                    className="w-full text-[12px] px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-primary)] outline-none"
+                  >
+                    <option value="none">无（手动输入）</option>
+                    <option value="habit_rate">习惯完成率</option>
+                    <option value="library_count">读书完成数</option>
+                    <option value="money_monthly">月度收支</option>
+                    <option value="journal_monthly">日记篇数</option>
+                    <option value="reflect_monthly">觉察次数</option>
+                  </select>
+                </div>
+                {newGoalAutoCalcType === 'habit_rate' && (
+                  <>
+                    <div>
+                      <label className="text-[10px] text-[var(--text-muted)] block mb-1">习惯名称</label>
+                      <input type="text" value={newGoalHabit} onChange={(e) => setNewGoalHabit(e.target.value)} className="w-full text-[12px] px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-primary)] outline-none" placeholder="冥想" />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-[var(--text-muted)] block mb-1">统计天数</label>
+                      <input type="number" value={newGoalWindow} onChange={(e) => setNewGoalWindow(e.target.value)} className="w-full text-[12px] px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-primary)] outline-none" placeholder="30" />
+                    </div>
+                  </>
+                )}
+                {(newGoalAutoCalcType === 'library_count' || newGoalAutoCalcType === 'money_monthly' || newGoalAutoCalcType === 'journal_monthly' || newGoalAutoCalcType === 'reflect_monthly') && (
+                  <div>
+                    <label className="text-[10px] text-[var(--text-muted)] block mb-1">目标数量</label>
+                    <input type="number" value={newGoalTarget} onChange={(e) => setNewGoalTarget(e.target.value)} className="w-full text-[12px] px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-primary)] outline-none" placeholder="12" />
+                  </div>
+                )}
+                {newGoalAutoCalcType === 'money_monthly' && (
+                  <div>
+                    <label className="text-[10px] text-[var(--text-muted)] block mb-1">收支方向</label>
+                    <select value={newGoalDirection} onChange={(e) => setNewGoalDirection(e.target.value as 'income' | 'expense')} className="w-full text-[12px] px-2 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-primary)] outline-none">
+                      <option value="income">收入</option>
+                      <option value="expense">支出</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+              {newGoalAutoCalcType !== 'none' && (
+                <p className="text-[10px] text-[var(--text-muted)]">
+                  {newGoalAutoCalcType === 'habit_rate' && `将根据「${newGoalHabit}」近 ${newGoalWindow} 天完成率自动计算进度`}
+                  {newGoalAutoCalcType === 'library_count' && `将根据已读完书籍数量 / ${newGoalTarget} 自动计算进度`}
+                  {newGoalAutoCalcType === 'money_monthly' && `将根据本月${newGoalDirection === 'income' ? '收入' : '支出'} / ¥${newGoalTarget} 自动计算`}
+                  {newGoalAutoCalcType === 'journal_monthly' && `将根据本月日记篇数 / ${newGoalTarget} 自动计算`}
+                  {newGoalAutoCalcType === 'reflect_monthly' && `将根据本月觉察次数 / ${newGoalTarget} 自动计算`}
+                </p>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -357,11 +496,152 @@ export default function GoalsPage() {
             >
               {isCalculating ? '计算中...' : '自动计算'}
             </button>
+            <button
+              onClick={() => setShowDimModal(true)}
+              className="text-[11px] text-[var(--text-muted)] bg-[var(--bg-subtle)] px-2.5 py-1 rounded-md cursor-pointer hover:text-[var(--accent)] transition-colors font-medium hover:bg-[var(--bg-hover)]"
+            >
+              管理维度
+            </button>
           </div>
         </div>
         <p className="text-[12px] text-[var(--text-muted)] mb-4">你离理想中的自己还有多远？</p>
         <VisionDistance data={visionDistance} onUpdate={updateDimension} onReset={resetVisionDistance} />
       </div>
+
+      {/* 管理维度 Modal */}
+      {showDimModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.5)' }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowDimModal(false); }}
+        >
+          <div className="card-base w-full max-w-sm max-h-[80vh] flex flex-col" style={{ boxShadow: '0 20px 60px rgba(0,0,0,0.4)' }}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-[14px] font-semibold text-[var(--text-primary)]">管理 Vision 维度</h3>
+              <button onClick={() => setShowDimModal(false)} className="p-1 rounded-md hover:bg-[var(--bg-hover)] text-[var(--text-muted)] transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* 维度列表 */}
+            <div className="flex-1 overflow-y-auto mb-4 flex flex-col gap-1.5">
+              {customDimensions.map((dim, index) => {
+                const isExpanded = expandedDimIndex === index;
+                const mappedHabits = getMappedHabits(index);
+                return (
+                  <div key={dim.label} className="rounded-lg bg-[var(--bg-subtle)] group overflow-hidden">
+                    {/* 维度行 */}
+                    <div className="flex items-center gap-2 px-3 py-2">
+                      <div className="w-3 h-3 rounded-full shrink-0" style={{ background: dim.color }} />
+                      <span className="flex-1 text-[13px] text-[var(--text-primary)]">{dim.label}</span>
+                      <span className="text-[10px] text-[var(--text-muted)] mr-1">{visionDistance[index]?.current ?? 0}%</span>
+                      
+                      {/* 展开/收起配置按钮 */}
+                      <button
+                        onClick={() => setExpandedDimIndex(isExpanded ? null : index)}
+                        className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--accent)] hover:bg-[var(--bg-hover)] transition-colors"
+                        title={isExpanded ? '收起配置' : '配置数据源'}
+                      >
+                        {isExpanded 
+                          ? <ChevronUp className="w-3.5 h-3.5" /> 
+                          : <Settings2 className="w-3.5 h-3.5" />
+                        }
+                      </button>
+                      
+                      {customDimensions.length > 1 && (
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`确定删除「${dim.label}」？`)) {
+                              removeDimension(index);
+                              if (expandedDimIndex === index) setExpandedDimIndex(null);
+                            }
+                          }}
+                          className="p-1 rounded text-[var(--text-muted)] hover:text-[var(--danger)] hover:bg-[var(--bg-hover)] transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* 展开的数据源配置面板 */}
+                    {isExpanded && (
+                      <div className="px-3 pb-3 pt-0 border-t border-[var(--border)] mt-0">
+                        <div className="pt-2">
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <Check className="w-3 h-3 text-[var(--accent)]" />
+                            <span className="text-[11px] font-medium text-[var(--text-secondary)]">关联习惯</span>
+                            <span className="text-[10px] text-[var(--text-muted)]">(勾选后自动计算将精确匹配)</span>
+                          </div>
+                          
+                          {habitList.length === 0 ? (
+                            <p className="text-[11px] text-[var(--text-muted)] py-2">还没有设置习惯</p>
+                          ) : (
+                            <div className="flex flex-wrap gap-1.5">
+                              {habitList.map(habit => {
+                                const isChecked = mappedHabits.includes(habit);
+                                return (
+                                  <button
+                                    key={habit}
+                                    onClick={() => toggleHabitMapping(index, habit)}
+                                    className={`text-[11px] px-2 py-1 rounded-md border transition-all ${
+                                      isChecked
+                                        ? 'bg-[var(--accent)] text-white border-[var(--accent)]'
+                                        : 'bg-transparent text-[var(--text-secondary)] border-[var(--border)] hover:border-[var(--accent)] hover:text-[var(--accent)]'
+                                    }`}
+                                  >
+                                    {isChecked && <Check className="w-3 h-3 inline mr-1 -mt-0.5" />}
+                                    {habit}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* 显示自动匹配提示 */}
+                          {mappedHabits.length > 0 && (
+                            <p className="text-[10px] text-[var(--text-muted)] mt-2 leading-relaxed">
+                              已手动映射 {mappedHabits.length} 个习惯。未映射的仍通过关键词自动匹配。
+                            </p>
+                          )}
+                          {mappedHabits.length === 0 && habitList.length > 0 && (
+                            <p className="text-[10px] text-[var(--text-muted)] mt-2 leading-relaxed">
+                              未手动映射，将通过关键词自动匹配相关习惯。
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* 添加新维度 */}
+            <div className="flex gap-2 pt-3 border-t border-[var(--border)]">
+              <input
+                type="text"
+                value={newDimInput}
+                onChange={(e) => setNewDimInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && newDimInput.trim()) {
+                    addDimension(newDimInput.trim());
+                    setNewDimInput('');
+                  }
+                }}
+                placeholder="新增维度名称..."
+                className="flex-1 text-[12px] px-3 py-1.5 rounded-lg border border-[var(--border)] bg-[var(--bg-card)] text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent)]"
+              />
+              <button
+                onClick={() => { if (newDimInput.trim()) { addDimension(newDimInput.trim()); setNewDimInput(''); } }}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[11px] font-medium bg-[var(--accent)] text-white hover:opacity-90 transition-opacity"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                添加
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
