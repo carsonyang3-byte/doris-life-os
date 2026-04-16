@@ -349,8 +349,8 @@ export default function DashboardPage({ onPageChange }: DashboardPageProps) {
           const statCards = [
             ...habitList.map((habit) => ({
               key: habit,
-              value: getHabitStreak(habit),
-              label: `${habit}连续天数`,
+              value: getHabitYearlyCount(habit),
+              label: `${habit}累计天数`,
               accent: false,
             })),
             {

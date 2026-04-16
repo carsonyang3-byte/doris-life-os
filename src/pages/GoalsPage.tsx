@@ -15,7 +15,8 @@ export default function GoalsPage() {
     availableYears, 
     switchYear, 
     updateDimension, 
-    resetVisionDistance, 
+    resetVisionDistance,
+    resetDimensionToAuto,
     calculateVisionDistance,
     isCalculating,
     customDimensions,
@@ -505,7 +506,7 @@ export default function GoalsPage() {
           </div>
         </div>
         <p className="text-[12px] text-[var(--text-muted)] mb-4">你离理想中的自己还有多远？</p>
-        <VisionDistance data={visionDistance} onUpdate={updateDimension} onReset={resetVisionDistance} />
+        <VisionDistance data={visionDistance} onUpdate={updateDimension} onReset={resetVisionDistance} onResetToAuto={resetDimensionToAuto} customDimensions={customDimensions} />
       </div>
 
       {/* 管理维度 Modal */}
@@ -658,10 +659,12 @@ function SectionHeader({ dot, title }: { dot: string; title: string }) {
   );
 }
 
-function VisionDistance({ data, onUpdate, onReset }: {
+function VisionDistance({ data, onUpdate, onReset, onResetToAuto, customDimensions }: {
   data: typeof DISTANCE_DIMS_DEFAULT;
   onUpdate: (index: number, value: number) => void;
   onReset: () => void;
+  onResetToAuto?: (index: number) => void;
+  customDimensions?: { manualOverride?: boolean }[];
 }) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [editValue, setEditValue] = useState('');
@@ -701,6 +704,17 @@ function VisionDistance({ data, onUpdate, onReset }: {
         <div key={dim.label} className="mb-4 last:mb-0">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[12px] font-medium text-[var(--text-secondary)]">{dim.label}</span>
+              {customDimensions?.[idx]?.manualOverride && (
+                <span className="text-[9px] px-1.5 py-0.5 rounded-md font-medium ml-1"
+                  style={{ background: 'rgba(201,169,110,0.12)', color: 'var(--accent-dark)' }}
+                >手动</span>
+              )}
+              {customDimensions?.[idx]?.manualOverride && onResetToAuto && (
+                <button
+                  onClick={() => onResetToAuto(idx)}
+                  className="text-[9px] text-[var(--success)] hover:underline ml-1"
+                >恢复自动</button>
+              )}
             {editingIndex === idx ? (
               <div className="flex items-center gap-1">
                 <input

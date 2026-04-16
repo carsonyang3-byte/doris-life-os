@@ -26,6 +26,7 @@ export interface VisionDimension {
   label: string;
   color: string;
   sources?: DimensionSource[];
+  manualOverride?: boolean;  // 手动编辑过，自动计算时跳过
 }
 
 // 默认维度数据源映射
@@ -402,6 +403,15 @@ export function useVisionEngine() {
       
       // 直接基于 customDimensions 构建新结果，不依赖闭包中的 visionDistance
       const newVisionDistance = customDimensions.map((dim, index) => {
+        // 跳过手动覆盖的维度，保留原值
+        if (dim.manualOverride) {
+          details.push([]);
+          return {
+            label: dim.label,
+            color: dim.color,
+            current: visionDistance[index]?.current ?? 0,
+          };
+        }
         const { score, details: dimDetails } = calculateDimensionScore(
           dim,
           habitsData,
@@ -440,6 +450,13 @@ export function useVisionEngine() {
       saveVisionDistance(year, updated);
       return updated;
     });
+    // 标记该维度为手动覆盖
+    setCustomDimensions(prev => {
+      const next = [...prev];
+      next[index] = { ...next[index], manualOverride: true };
+      saveCustomDimensions(next);
+      return next;
+    });
   }, [year]);
 
   // 重置所有维度
@@ -448,7 +465,23 @@ export function useVisionEngine() {
     setVisionDistance(defaultData);
     saveVisionDistance(year, defaultData);
     setCalculationDetails([]);
+    // 清除所有手动覆盖标记
+    setCustomDimensions(prev => {
+      const next = prev.map(d => ({ ...d, manualOverride: false }));
+      saveCustomDimensions(next);
+      return next;
+    });
   }, [year, customDimensions]);
+
+  // 恢复某个维度的自动计算
+  const resetDimensionToAuto = useCallback((index: number) => {
+    setCustomDimensions(prev => {
+      const next = [...prev];
+      next[index] = { ...next[index], manualOverride: false };
+      saveCustomDimensions(next);
+      return next;
+    });
+  }, []);
 
   // 执行跨年迁移
   const migrateToNewYear = useCallback((newYear: number) => {
@@ -483,6 +516,7 @@ export function useVisionEngine() {
     updateDimensionSources,
     updateDimension,
     resetVisionDistance,
+    resetDimensionToAuto,
     migrateToNewYear,
     
     // 详情

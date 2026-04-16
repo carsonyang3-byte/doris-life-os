@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { SyncManager } from '@/components/SyncManager';
-import { clearSession } from '@/lib/storage';
+import { clearSession, getItem } from '@/lib/storage';
+import { formatDate } from '@/lib/utils';
 
 export default function SettingsPage() {
   const [storageInfo, setStorageInfo] = useState({
@@ -41,6 +42,131 @@ export default function SettingsPage() {
     }
   };
 
+  // 导出结构化分析数据
+  const handleExportAnalysis = () => {
+    try {
+      const year = new Date().getFullYear();
+      const exportData: Record<string, any> = {
+        exportDate: new Date().toISOString(),
+        year,
+      };
+
+      // 1. 习惯打卡数据
+      const habitsRaw = getItem('life-os-habits');
+      if (habitsRaw) {
+        const habitsData = JSON.parse(habitsRaw);
+        // 转成 [{date, 冥想: true, 运动: false, ...}] 的扁平结构
+        const habitList = JSON.parse(getItem('life-os-habit-list') || '["冥想","运动","阅读","早睡","喝水","反思"]');
+        exportData.habits = Object.entries(habitsData)
+          .filter(([date]) => date.startsWith(String(year)))
+          .map(([date, habits]: [string, any]) => {
+            const row: Record<string, any> = { date };
+            habitList.forEach((h: string) => { row[h] = habits[h] ?? null; });
+            return row;
+          })
+          .sort((a: any, b: any) => a.date.localeCompare(b.date));
+      }
+
+      // 2. 每日 Today 记录（三件事 + 开心小事 + 觉察）
+      const todayRecords: any[] = [];
+      for (let i = 0; i < 365; i++) {
+        const d = new Date(year, 0, 1);
+        d.setDate(d.getDate() + i);
+        if (d.getFullYear() !== year) break;
+        const dateStr = formatDate(d);
+        const raw = getItem('life-os-today-' + dateStr);
+        if (raw) {
+          try {
+            const data = JSON.parse(raw);
+            todayRecords.push({ date: dateStr, tasks: data.tasks, happy: data.happy, awareness: data.awareness });
+          } catch {}
+        }
+      }
+      if (todayRecords.length > 0) exportData.todayRecords = todayRecords;
+
+      // 3. 反思/觉察记录
+      const reflectRecords: any[] = [];
+      for (let i = 0; i < 365; i++) {
+        const d = new Date(year, 0, 1);
+        d.setDate(d.getDate() + i);
+        if (d.getFullYear() !== year) break;
+        const dateStr = formatDate(d);
+        const raw = getItem('life-os-reflect-daily-' + dateStr);
+        if (raw) {
+          try { reflectRecords.push({ date: dateStr, type: 'daily', ...JSON.parse(raw) }); } catch {}
+        }
+        const rawW = getItem('life-os-reflect-weekly-' + dateStr);
+        if (rawW) {
+          try { reflectRecords.push({ date: dateStr, type: 'weekly', ...JSON.parse(rawW) }); } catch {}
+        }
+      }
+      if (reflectRecords.length > 0) exportData.reflections = reflectRecords;
+
+      // 4. 日记
+      const journalMeRaw = getItem('life-os-journal-me');
+      if (journalMeRaw) {
+        try {
+          exportData.journalMe = JSON.parse(journalMeRaw).map((e: any) => ({
+            date: e.date, title: e.title, content: e.content, mood: e.mood, tags: e.tags,
+          }));
+        } catch {}
+      }
+
+      // 5. 财务记录
+      const moneyRaw = getItem('life-os-money');
+      if (moneyRaw) {
+        try {
+          exportData.moneyRecords = JSON.parse(moneyRaw).map((r: any) => ({
+            date: r.date, type: r.type, category: r.categoryLabel, amount: r.amount, note: r.note,
+          }));
+        } catch {}
+      }
+
+      // 6. 目标
+      const goalsRaw = getItem('life-os-goals');
+      if (goalsRaw) {
+        try {
+          exportData.goals = JSON.parse(goalsRaw).map((g: any) => ({
+            title: g.title, progress: g.progress, year: g.year, autoCalc: g.autoCalc?.type || null,
+          }));
+        } catch {}
+      }
+
+      // 7. Vision Distance
+      const visionRaw = getItem(`life-os-vision-distance-${year}`);
+      if (visionRaw) {
+        try {
+          exportData.visionDistance = JSON.parse(visionRaw).map((d: any) => ({
+            label: d.label, current: d.current,
+          }));
+        } catch {}
+      }
+
+      // 8. 图书/影音
+      const libraryRaw = getItem('doris_library');
+      if (libraryRaw) {
+        try {
+          exportData.library = JSON.parse(libraryRaw).map((i: any) => ({
+            type: i.type, title: i.title, creator: i.creator, date: i.date, rating: i.rating, status: i.status, note: i.note,
+          }));
+        } catch {}
+      }
+
+      const jsonStr = JSON.stringify(exportData, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `life-os-analysis-${year}-${formatDate(new Date())}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      alert('导出失败：' + (error instanceof Error ? error.message : String(error)));
+    }
+  };
+
   const handleClearCache = () => {
     if (window.confirm('确定要清除本地缓存吗？云端数据不会受影响，但清除后需要重新从云端同步。')) {
       const keysToKeep = ['__auth_password__', 'last_sync_time'];
@@ -67,6 +193,25 @@ export default function SettingsPage() {
 
       {/* 云端同步卡片 */}
       <SyncManager />
+
+      {/* 分析数据导出 */}
+      <Card>
+        <CardHeader>
+          <CardTitle>数据分析导出</CardTitle>
+          <CardDescription>
+            导出结构化数据用于 AI 分析（如让 AI 帮你发现行为模式、情绪规律等）
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-gray-600">
+            导出内容包含：习惯打卡、每日记录（三件事/觉察/开心小事）、反思记录、日记、财务、目标、Vision Distance、图书影音。
+            数据格式为结构化 JSON，可直接粘贴给 ChatGPT / Claude 等进行分析。
+          </p>
+          <Button onClick={handleExportAnalysis} className="w-full sm:w-auto">
+            导出 {new Date().getFullYear()} 年分析数据
+          </Button>
+        </CardContent>
+      </Card>
 
       {/* 存储信息卡片 */}
       <Card>
