@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, Fragment, useRef } from 'react';
 import { ChevronRight, ChevronLeft, CheckCircle2, Sun, Eye, Sparkles, CalendarDays, Settings, RefreshCw, Plus, Pencil, Trash2, X, Check } from 'lucide-react';
 import { useToday, useTodayData, useQuotes, useWeeklyFocus, useHabits, useMoney, useGoals, useScoring, useLibrary, useVisionEngineShared } from '../hooks';
-import { useAIInsight } from '../hooks/useAIInsight';
+import { useAIInsight, parseInsightSections } from '../hooks/useAIInsight';
 import type { InsightTab } from '../hooks/useAIInsight';
 import { useGoalProgress } from '../hooks/useGoalProgress';
 import { VISION, DAILY_QUESTION_SETS, DAILY_SET_KEYS } from '../lib/constants';
@@ -686,21 +686,35 @@ export default function DashboardPage({ onPageChange }: DashboardPageProps) {
         </div>
         <div className="insight-content">
           <div className="insight-bar" />
-          <p className="text-[14px] text-[var(--text-secondary)] font-light leading-[1.7] pl-4 min-h-[60px]">
+          <div className="pl-4 min-h-[60px]">
             {isLoading && !insightText ? (
-              <span className="text-[var(--text-muted)] italic">正在分析你的数据...</span>
+              <p className="text-[14px] text-[var(--text-muted)] italic">正在深度分析你的数据...</p>
             ) : insightError && !insightText ? (
-              <span className="text-[var(--danger)] text-[12px]">API 调用失败，显示预设洞察</span>
+              <p className="text-[var(--danger)] text-[12px]">API 调用失败，显示预设洞察</p>
             ) : !insightText ? (
-              <span className="text-[var(--text-muted)] italic">点击右上角「换一条」开始 AI 洞察分析</span>
+              <p className="text-[14px] text-[var(--text-muted)] italic">点击右上角「换一条」开始 AI 深度分析</p>
             ) : (
-              insightText
+              (() => {
+                const sections = parseInsightSections(insightText);
+                return sections.map((sec, idx) => (
+                  <div key={idx} className={idx > 0 ? 'mt-3.5' : ''}>
+                    {sec.label && (
+                      <div className="text-[12px] font-semibold text-[var(--accent)] mb-1 uppercase tracking-wide">
+                        {sec.label}
+                      </div>
+                    )}
+                    <p className="text-[13px] text-[var(--text-secondary)] font-light leading-[1.75]">
+                      {sec.content}
+                    </p>
+                  </div>
+                ));
+              })()
             )}
-          </p>
+          </div>
           {!apiKey && (
             <div className="mt-2 pl-4">
               <span className="text-[10px] text-[var(--text-muted)]">
-                当前使用预设洞察 | 点击右上角 API Key 接入 Gemini 获取个性化分析
+                当前使用预设洞察 | 点击右上角 API Key 接入 Gemini 获取个性化深度分析
               </span>
             </div>
           )}
