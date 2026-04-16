@@ -42,115 +42,11 @@ export default function SettingsPage() {
     }
   };
 
-  // 导出结构化分析数据
+  // 导出结构化分析数据（JSON 格式）
   const handleExportAnalysis = () => {
     try {
       const year = new Date().getFullYear();
-      const exportData: Record<string, any> = {
-        exportDate: new Date().toISOString(),
-        year,
-      };
-
-      // 1. 习惯打卡数据
-      const habitsRaw = getItem('life-os-habits');
-      if (habitsRaw) {
-        const habitsData = JSON.parse(habitsRaw);
-        // 转成 [{date, 冥想: true, 运动: false, ...}] 的扁平结构
-        const habitList = JSON.parse(getItem('life-os-habit-list') || '["冥想","运动","阅读","早睡","喝水","反思"]');
-        exportData.habits = Object.entries(habitsData)
-          .filter(([date]) => date.startsWith(String(year)))
-          .map(([date, habits]: [string, any]) => {
-            const row: Record<string, any> = { date };
-            habitList.forEach((h: string) => { row[h] = habits[h] ?? null; });
-            return row;
-          })
-          .sort((a: any, b: any) => a.date.localeCompare(b.date));
-      }
-
-      // 2. 每日 Today 记录（三件事 + 开心小事 + 觉察）
-      const todayRecords: any[] = [];
-      for (let i = 0; i < 365; i++) {
-        const d = new Date(year, 0, 1);
-        d.setDate(d.getDate() + i);
-        if (d.getFullYear() !== year) break;
-        const dateStr = formatDate(d);
-        const raw = getItem('life-os-today-' + dateStr);
-        if (raw) {
-          try {
-            const data = JSON.parse(raw);
-            todayRecords.push({ date: dateStr, tasks: data.tasks, happy: data.happy, awareness: data.awareness });
-          } catch {}
-        }
-      }
-      if (todayRecords.length > 0) exportData.todayRecords = todayRecords;
-
-      // 3. 反思/觉察记录
-      const reflectRecords: any[] = [];
-      for (let i = 0; i < 365; i++) {
-        const d = new Date(year, 0, 1);
-        d.setDate(d.getDate() + i);
-        if (d.getFullYear() !== year) break;
-        const dateStr = formatDate(d);
-        const raw = getItem('life-os-reflect-daily-' + dateStr);
-        if (raw) {
-          try { reflectRecords.push({ date: dateStr, type: 'daily', ...JSON.parse(raw) }); } catch {}
-        }
-        const rawW = getItem('life-os-reflect-weekly-' + dateStr);
-        if (rawW) {
-          try { reflectRecords.push({ date: dateStr, type: 'weekly', ...JSON.parse(rawW) }); } catch {}
-        }
-      }
-      if (reflectRecords.length > 0) exportData.reflections = reflectRecords;
-
-      // 4. 日记
-      const journalMeRaw = getItem('life-os-journal-me');
-      if (journalMeRaw) {
-        try {
-          exportData.journalMe = JSON.parse(journalMeRaw).map((e: any) => ({
-            date: e.date, title: e.title, content: e.content, mood: e.mood, tags: e.tags,
-          }));
-        } catch {}
-      }
-
-      // 5. 财务记录
-      const moneyRaw = getItem('life-os-money');
-      if (moneyRaw) {
-        try {
-          exportData.moneyRecords = JSON.parse(moneyRaw).map((r: any) => ({
-            date: r.date, type: r.type, category: r.categoryLabel, amount: r.amount, note: r.note,
-          }));
-        } catch {}
-      }
-
-      // 6. 目标
-      const goalsRaw = getItem('life-os-goals');
-      if (goalsRaw) {
-        try {
-          exportData.goals = JSON.parse(goalsRaw).map((g: any) => ({
-            title: g.title, progress: g.progress, year: g.year, autoCalc: g.autoCalc?.type || null,
-          }));
-        } catch {}
-      }
-
-      // 7. Vision Distance
-      const visionRaw = getItem(`life-os-vision-distance-${year}`);
-      if (visionRaw) {
-        try {
-          exportData.visionDistance = JSON.parse(visionRaw).map((d: any) => ({
-            label: d.label, current: d.current,
-          }));
-        } catch {}
-      }
-
-      // 8. 图书/影音
-      const libraryRaw = getItem('doris_library');
-      if (libraryRaw) {
-        try {
-          exportData.library = JSON.parse(libraryRaw).map((i: any) => ({
-            type: i.type, title: i.title, creator: i.creator, date: i.date, rating: i.rating, status: i.status, note: i.note,
-          }));
-        } catch {}
-      }
+      const exportData = buildExportData(year);
 
       const jsonStr = JSON.stringify(exportData, null, 2);
       const blob = new Blob([jsonStr], { type: 'application/json' });
@@ -158,6 +54,237 @@ export default function SettingsPage() {
       const a = document.createElement('a');
       a.href = url;
       a.download = `life-os-analysis-${year}-${formatDate(new Date())}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      alert('导出失败：' + (error instanceof Error ? error.message : String(error)));
+    }
+  };
+
+  // 构建导出数据（供 JSON 和 Markdown 共用）
+  const buildExportData = (year: number): Record<string, any> => {
+    const data: Record<string, any> = { exportDate: new Date().toISOString(), year };
+
+    // 1. 习惯打卡数据
+    const habitsRaw = getItem('life-os-habits');
+    if (habitsRaw) {
+      const habitsData = JSON.parse(habitsRaw);
+      const habitList = JSON.parse(getItem('life-os-habit-list') || '["冥想","运动","阅读","早睡","喝水","反思"]');
+      data.habits = Object.entries(habitsData)
+        .filter(([date]) => date.startsWith(String(year)))
+        .map(([date, habits]: [string, any]) => {
+          const row: Record<string, any> = { date };
+          habitList.forEach((h: string) => { row[h] = habits[h] ?? null; });
+          return row;
+        })
+        .sort((a: any, b: any) => a.date.localeCompare(b.date));
+    }
+
+    // 2. 每日 Today 记录（三件事 + 开心小事 + 觉察）
+    const todayRecords: any[] = [];
+    for (let i = 0; i < 365; i++) {
+      const d = new Date(year, 0, 1);
+      d.setDate(d.getDate() + i);
+      if (d.getFullYear() !== year) break;
+      const dateStr = formatDate(d);
+      const raw = getItem('life-os-today-' + dateStr);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          todayRecords.push({ date: dateStr, tasks: parsed.tasks, happy: parsed.happy, awareness: parsed.awareness });
+        } catch {}
+      }
+    }
+    if (todayRecords.length > 0) data.todayRecords = todayRecords;
+
+    // 3. 反思/觉察记录
+    const reflectRecords: any[] = [];
+    for (let i = 0; i < 365; i++) {
+      const d = new Date(year, 0, 1);
+      d.setDate(d.getDate() + i);
+      if (d.getFullYear() !== year) break;
+      const dateStr = formatDate(d);
+      const raw = getItem('life-os-reflect-daily-' + dateStr);
+      if (raw) { try { reflectRecords.push({ date: dateStr, type: '每日', ...JSON.parse(raw) }); } catch {} }
+      const rawW = getItem('life-os-reflect-weekly-' + dateStr);
+      if (rawW) { try { reflectRecords.push({ date: dateStr, type: '每周', ...JSON.parse(rawW) }); } catch {} }
+    }
+    if (reflectRecords.length > 0) data.reflections = reflectRecords;
+
+    // 4. 日记
+    const journalMeRaw = getItem('life-os-journal-me');
+    if (journalMeRaw) {
+      try { data.journalMe = JSON.parse(journalMeRaw).map((e: any) => ({ date: e.date, title: e.title, content: e.content, mood: e.mood, tags: e.tags })); } catch {}
+    }
+
+    // 5. 财务记录
+    const moneyRaw = getItem('life-os-money');
+    if (moneyRaw) {
+      try { data.moneyRecords = JSON.parse(moneyRaw).map((r: any) => ({ date: r.date, type: r.type, category: r.categoryLabel, amount: r.amount, note: r.note })); } catch {}
+    }
+
+    // 6. 目标
+    const goalsRaw = getItem('life-os-goals');
+    if (goalsRaw) {
+      try { data.goals = JSON.parse(goalsRaw).map((g: any) => ({ title: g.title, progress: g.progress, year: g.year, autoCalc: g.autoCalc?.type || null })); } catch {}
+    }
+
+    // 7. Vision Distance
+    const visionRaw = getItem(`life-os-vision-distance-${year}`);
+    if (visionRaw) {
+      try { data.visionDistance = JSON.parse(visionRaw).map((d: any) => ({ label: d.label, current: d.current })); } catch {}
+    }
+
+    // 8. 图书/影音
+    const libraryRaw = getItem('doris_library');
+    if (libraryRaw) {
+      try { data.library = JSON.parse(libraryRaw).map((i: any) => ({ type: i.type, title: i.title, creator: i.creator, date: i.date, rating: i.rating, status: i.status, note: i.note })); } catch {}
+    }
+
+    return data;
+  };
+
+  // 导出 Markdown 格式（适合 AI 分析）
+  const handleExportMarkdown = () => {
+    try {
+      const year = new Date().getFullYear();
+      const data = buildExportData(year);
+
+      let md = `# Doris 生活数据分析报告\n\n`;
+      md += `- 导出时间：${new Date().toLocaleString('zh-CN')}\n`;
+      md += `- 数据年份：${year}年\n`;
+      md += `- 用途说明：此文件专为 AI 分析优化，可直接粘贴给 ChatGPT / Claude / Gemini 等大模型，用于发现行为模式、情绪规律、习惯趋势等。\n\n`;
+      md += `---\n\n`;
+
+      // === 1. 习惯打卡 ===
+      if (data.habits?.length) {
+        md += `## 一、习惯打卡（${year}年累计）\n\n`;
+        // 表头
+        const headers = Object.keys(data.habits[0]);
+        md += `| ${headers.join(' | ')} |\n`;
+        md += `${headers.map(() => '---').join('|')}\n`;
+        data.habits.forEach((row: any) => {
+          md += `| ${headers.map(h => h === 'date' ? row[h] : (row[h] === true ? '✓' : (row[h] === false || !row[h] ? '✗': row[h]))).join(' | ')} |\n`;
+        });
+
+        // 汇总统计
+        const habitNames = headers.filter(h => h !== 'date');
+        md += `\n**打卡统计：**\n\n`;
+        habitNames.forEach(h => {
+          const done = data.habits.filter((r: any) => r[h] === true).length;
+          const total = data.habits.length;
+          md += `- ${h}：${done}/${total}天（完成率 ${(done/total*100).toFixed(0)}%）\n`;
+        });
+        md += `\n`;
+      }
+
+      // === 2. 每日记录 ===
+      if (data.todayRecords?.length) {
+        md += `## 二、每日记录（三件事 + 开心小事 + 觉察）\n\n`;
+        data.todayRecords.forEach((r: any) => {
+          md += `### ${r.date}\n\n`;
+          if (r.tasks?.length) {
+            md += `**三件事：**\n`;
+            r.tasks.forEach((t: any, i: number) => { md += `${i+1}. ${t.text || t} ${t.done ? '✓' : ''}\n`; });
+            md += `\n`;
+          }
+          if (r.happy) md += `**开心小事：** ${r.happy}\n\n`;
+          if (r.awareness) md += `**觉察：** ${r.awareness}\n\n`;
+          md += `---\n\n`;
+        });
+      }
+
+      // === 3. 反思记录 ===
+      if (data.reflections?.length) {
+        md += `## 三、反思与觉察记录\n\n`;
+        data.reflections.forEach((r: any) => {
+          md += `### ${r.date} [${r.type}]\n\n`;
+          if (r.answers && Array.isArray(r.answers)) {
+            r.answers.forEach((ans: any, i: number) => {
+              if (ans.q) md += `**Q${i+1}:** ${ans.q}\n\n`;
+              if (ans.a) md += `> ${ans.a}\n\n`;
+            });
+          } else if (typeof r === 'object') {
+            // fallback: 输出所有字段
+            Object.entries(r).forEach(([k, v]) => {
+              if (!['date','type'].includes(k) && v) md += `**${k}:** ${v}\n\n`;
+            });
+          }
+          md += `---\n\n`;
+        });
+      }
+
+      // === 4. 日记 ===
+      if (data.journalMe?.length) {
+        md += `## 四、日记\n\n`;
+        data.journalMe.forEach((e: any) => {
+          md += `### ${e.date}${e.title ? ' - '+e.title : ''}\n\n`;
+          if (e.mood) md += `**心情：** ${e.mood}\n\n`;
+          if (e.content) md += `${e.content}\n\n`;
+          if (e.tags?.length) md += `标签：${e.tags.join(', ')}\n\n`;
+          md += `---\n\n`;
+        });
+      }
+
+      // === 5. 财务记录 ===
+      if (data.moneyRecords?.length) {
+        md += `## 五、财务记录\n\n`;
+        md += `| 日期 | 类型 | 分类 | 金额 | 备注 |\n|------|------|------|------|------|\n`;
+        data.moneyRecords.forEach((r: any) => {
+          md += `| ${r.date} | ${r.type || '-'} | ${r.category || '-'} | ${r.amount || '-'} | ${r.note || '-'} |\n`;
+        });
+
+        // 收支汇总
+        const income = data.moneyRecords.filter((r: any) => r.type === '收入').reduce((s: number, r: any) => s + (parseFloat(r.amount)||0), 0);
+        const expense = data.moneyRecords.filter((r: any) => r.type === '支出').reduce((s: number, r: any) => s + (parseFloat(r.amount)||0), 0);
+        md += `\n**汇总：** 收入 ¥${income.toFixed(2)} / 支出 ¥${expense.toFixed(2)} / 结余 ¥{(income-expense).toFixed(2)}\n\n`;
+      }
+
+      // === 6. 目标 ===
+      if (data.goals?.length) {
+        md += `## 六、目标\n\n`;
+        data.goals.forEach((g: any) => {
+          const bar = '█'.repeat(Math.round(g.progress/5)) + '░'.repeat(20-Math.round(g.progress/5));
+          md += `- **${g.title}** [${bar}] ${g.progress}%\n`;
+        });
+        md += `\n`;
+      }
+
+      // === 7. Vision Distance ===
+      if (data.visionDistance?.length) {
+        md += `## 七、Vision Distance 生活距离（最近一次）\n\n`;
+        data.visionDistance.slice(-1).forEach((d: any) => {
+          md += `| 维度 | 当前值 |\n|------|--------|\n`;
+          if (Array.isArray(d.current)) {
+            d.current.forEach((item: any) => {
+              md += `| ${item.label || item.name || '-'} | ${item.value ?? item.score ?? '-'} |\n`;
+            });
+          } else if (typeof d.current === 'object') {
+            Object.entries(d.current).forEach(([k, v]) => { md += `| ${k} | ${v} |\n`; });
+          }
+        });
+        md += `\n`;
+      }
+
+      // === 8. 图书/影音 ===
+      if (data.library?.length) {
+        md += `## 八、图书与影音\n\n`;
+        md += `| 类型 | 标题 | 作者/导演 | 完成日期 | 评分 | 状态 | 备注 |\n|------|------|----------|---------|------|------|------|\n`;
+        data.library.forEach((i: any) => {
+          md += `| ${i.type || '-'} | ${i.title || '-'} | ${i.creator || '-'} | ${i.date || '-'} | ${i.rating || '-'} | ${i.status || '-'} | ${i.note || '-'} |\n`;
+        });
+        md += `\n`;
+      }
+
+      md += `---\n\n*本文件由 Doris Life OS 自动生成，仅供个人分析使用。*\n`;
+
+      const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `life-os-analysis-${year}-${formatDate(new Date())}.md`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -205,11 +332,18 @@ export default function SettingsPage() {
         <CardContent className="space-y-3">
           <p className="text-sm text-gray-600">
             导出内容包含：习惯打卡、每日记录（三件事/觉察/开心小事）、反思记录、日记、财务、目标、Vision Distance、图书影音。
-            数据格式为结构化 JSON，可直接粘贴给 ChatGPT / Claude 等进行分析。
           </p>
-          <Button onClick={handleExportAnalysis} className="w-full sm:w-auto">
-            导出 {new Date().getFullYear()} 年分析数据
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Button onClick={handleExportAnalysis} variant="outline" className="flex-1 sm:w-auto">
+              导出 JSON
+            </Button>
+            <Button onClick={handleExportMarkdown} className="flex-1 sm:w-auto">
+              导出 Markdown（推荐 AI 分析用）
+            </Button>
+          </div>
+          <p className="text-xs text-gray-500 mt-1">
+            推荐使用 Markdown 格式：AI 读取效率更高、token 消耗更低，且包含汇总统计和格式化表格。JSON 格式适合程序化处理和数据恢复。
+          </p>
         </CardContent>
       </Card>
 
