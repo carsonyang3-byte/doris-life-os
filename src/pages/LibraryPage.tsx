@@ -44,6 +44,58 @@ interface ParsedBook {
 function parseWereadText(text: string): ParsedBook[] {
   const books: ParsedBook[] = [];
 
+  // ── 微信读书导出文本格式（严格模式） ──
+  // 特征："X 个笔记" + "---" 分隔 + "> " 开头为划线
+  if (text.includes('个笔记') && text.includes('---')) {
+    const blocks = text.split(/\n\s*---\s*\n/);
+    for (const block of blocks) {
+      if (!block.trim()) continue;
+      const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
+
+      // 第一行 = 书名（去掉括号来源标注）
+      const firstLine = lines[0] || '';
+      const title = firstLine.replace(/\s*[\(（][^)）]+[\)）]\s*$/, '').trim();
+      if (!title || title.length < 2 || /^[0-9]/.test(title)) continue;
+
+      const book: ParsedBook = { title, author: undefined, highlights: [], notes: [] };
+
+      // 第二行可能是作者（跳过元数据）
+      let i = 1;
+      const META_PATTERNS = ['个笔记', '阅读周期', '阅读时长', '开始时间', '结束时间', '*'];
+      while (i < lines.length) {
+        const l = lines[i];
+        // 跳过所有元数据行
+        if (!l || META_PATTERNS.some(p => l.startsWith(p)) || /^[\d\s:\/\-]+$/.test(l)) { i++; continue; }
+        // 如果是作者行（不含特殊标记且不是章节标题不是划线不是分隔符）
+        if (!l.startsWith('>') && !/^#{1,3}\s/.test(l) && !l.includes('<hr') && i <= 2) {
+          book.author = l;
+          i++;
+          continue;
+        }
+        break;
+      }
+
+      // 严格只收集 "> " 开头的行作为划线金句
+      for (; i < lines.length; i++) {
+        const line = lines[i];
+        if (!line) continue;
+        // 只认 > 开头的划线
+        if (line.startsWith('>')) {
+          const hl = line.slice(1).trim();
+          if (hl && hl.length >= 4) {  // 至少4个字才值得保留为金句
+            book.highlights.push(hl);
+          }
+        }
+        // 跳过其他一切：章节标题、<hr/>、正文段落、元数据
+      }
+
+      if (book.highlights.length > 0) {
+        books.push(book);
+      }
+    }
+    if (books.length > 0) return books;
+  }
+
   // 按书名分割：匹配 《书名》 或 【书名】
   const bookRegex = /[《【]([^》\]]+)[》】]/g;
   let match;

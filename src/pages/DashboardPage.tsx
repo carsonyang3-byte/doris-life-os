@@ -145,17 +145,21 @@ export default function DashboardPage({ onPageChange }: DashboardPageProps) {
                 从 Library 导入微信读书笔记后，这里会展示你的划线金句
               </div>
             )}
-          <div className="relative min-h-[180px] flex flex-col justify-center">
-            <div className="absolute top-2 left-4 text-[72px] leading-none text-[var(--accent-light)] z-0 select-none" style={{ fontFamily: "'Noto Serif SC', Georgia, serif" }}>
+          <div className="relative min-h-[200px] flex flex-col justify-center">
+            <div className="absolute top-1 left-3 text-[64px] leading-none text-[var(--accent-light)] z-0 select-none opacity-40" style={{ fontFamily: "'Noto Serif SC', Georgia, serif" }}>
               &ldquo;
             </div>
-            <p className="relative z-10 pt-7 pl-6 pr-5 text-[16px] leading-[1.9]" style={{ fontFamily: "'Noto Serif SC', Georgia, serif" }}>
+            <p className="relative z-10 pt-7 pl-6 pr-5 text-[17px] leading-[2]" style={{ fontFamily: "'Noto Serif SC', Georgia, serif", color: 'var(--text-primary)' }}>
               {quote.text}
             </p>
-            <div className="relative z-10 pt-2.5 pl-6 pr-5 flex items-center gap-2.5">
-              <span className="text-[12px] text-[var(--accent)] font-medium">{quote.book}</span>
-              <span className="w-[3px] h-[3px] rounded-full bg-[var(--text-muted)]" />
-              <span className="text-[11px] text-[var(--text-muted)]">{quote.author}</span>
+            <div className="relative z-10 mt-4 ml-6 mr-5 pt-3 border-t border-[var(--border)] flex items-center gap-3">
+              <span className="text-[13px] text-[var(--accent)] font-medium">{quote.book}</span>
+              {quote.author && quote.author !== '微信读书' && (
+                <>
+                  <span className="w-[3px] h-[3px] rounded-full bg-[var(--text-muted)]" />
+                  <span className="text-[12px] text-[var(--text-secondary)]">{quote.author}</span>
+                </>
+              )}
             </div>
           </div>
         </div>

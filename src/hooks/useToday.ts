@@ -87,43 +87,44 @@ export function useQuotes(libraryItems?: LibraryItem[], todayStr?: string) {
     if (!libraryItems || libraryItems.length === 0) return [];
 
     const quotes: Quote[] = [];
+    const seen = new Set<string>();
+
+    // 元数据关键词黑名单 — 这些行的内容绝不可能是金句
+    const META_KEYWORDS = ['开始时间', '结束时间', '阅读周期', '阅读时长', '个笔记', '<hr', '---'];
+
     for (const item of libraryItems) {
+      const author = item.creator || '微信读书';
+
+      // ── 优先从 wereadHighlights 读取（这是解析器专门提取的干净划线）─
       if (item.wereadHighlights && item.wereadHighlights.length > 0) {
         for (const h of item.wereadHighlights) {
           const t = h.text?.trim() ?? '';
-          if (t.length >= 3) {
-            quotes.push({
-              text: t,
-              book: item.title,
-              author: item.creator || '微信读书',
-            });
+          if (t && t.length >= 4 && !seen.has(t)) {
+            seen.add(t);
+            quotes.push({ text: t, book: item.title, author });
           }
         }
-        continue;
+        continue;  // 有 wereadHighlights 就不从 note 里捞了
       }
+
+      // ── fallback: 从 note 提取（严格过滤元数据）──
       if (!item.note) continue;
-      const lines = item.note.split('\n').filter((l) => l.trim());
+      const lines = item.note.split('\n');
       for (const line of lines) {
         const trimmed = line.trim();
-        if (
-          trimmed.startsWith('书评：') ||
-          trimmed.startsWith('划线') ||
-          trimmed.startsWith('笔记') ||
-          trimmed.startsWith('微信读书') ||
-          trimmed === '...' ||
-          trimmed === '…'
-        ) {
-          continue;
-        }
-        if (trimmed.length >= 10 && !trimmed.startsWith('http')) {
-          quotes.push({
-            text: trimmed,
-            book: item.title,
-            author: item.creator || '微信读书',
-          });
+        // 跳过空行、省略号、URL、纯数字时间、含元数据关键字的行
+        if (!trimmed || trimmed === '...' || trimmed === '\u2026' ||
+            trimmed.startsWith('http') ||
+            META_KEYWORDS.some(k => trimmed.includes(k)) ||
+            seen.has(trimmed)) continue;
+        // 至少4个字符才保留为金句
+        if (trimmed.length >= 4 && !/^[\d\s:\-\/]+$/.test(trimmed)) {
+          seen.add(trimmed);
+          quotes.push({ text: trimmed, book: item.title, author });
         }
       }
     }
+
     return quotes;
   }, [libraryItems]);
 
