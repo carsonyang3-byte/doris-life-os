@@ -287,7 +287,7 @@ function buildWereadExportJson(items: LibraryItem[]): string {
 
 export default function LibraryPage() {
   const { todayStr } = useToday();
-  const { items, addItem, addItems, deleteItem, byType, stats, upsertWereadImports, upsertWereadBooks } = useLibrary();
+  const { items, addItem, addItems, updateItem, deleteItem, byType, stats, upsertWereadImports, upsertWereadBooks } = useLibrary();
 
   const [activeTab, setActiveTab] = useState<ItemType | 'all'>('all');
   const [showAddForm, setShowAddForm] = useState(false);
