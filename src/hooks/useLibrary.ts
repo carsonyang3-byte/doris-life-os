@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { LibraryItem, WereadHighlightEntry } from '../types';
-import type { WereadImportPayload } from '../lib/wereadApi';
+import type { WereadImportPayload, WereadBookPayload } from '../lib/wereadApi';
 import { getItem, setItem } from '../lib/storage';
 import { formatDate } from '../lib/utils';
 
@@ -124,5 +124,65 @@ export function useLibrary() {
     });
   }, []);
 
-  return { items, addItem, addItems, updateItem, deleteItem, byType, stats, upsertWereadImports };
+  /** 从微信读书书架同步已读书目（不含划线） */
+  const upsertWereadBooks = useCallback((books: WereadBookPayload[]) => {
+    const today = formatDate(new Date());
+    setItems((prev) => {
+      const next = [...prev];
+      const newItems: LibraryItem[] = [];
+      let nid = Date.now();
+      let newCount = 0;
+      let updateCount = 0;
+
+      for (const b of books) {
+        // 映射微信读书状态到 LibraryItem 状态
+        // 1-在读 2-读完 3-想读 4-暂停
+        let itemStatus: LibraryItem['status'];
+        if (b.readStatus === 2) itemStatus = 'completed';
+        else if (b.readStatus === 4) itemStatus = 'abandoned';
+        else itemStatus = 'reading';
+
+        const idx = next.findIndex(
+          (i) => i.wereadBookId === b.bookId || (i.type === 'book' && i.title === b.title && !!b.title)
+        );
+
+        if (idx >= 0) {
+          // 已存在 → 更新状态和作者
+          const cur = next[idx];
+          next[idx] = {
+            ...cur,
+            type: 'book',
+            creator: b.author || cur.creator,
+            wereadBookId: b.bookId,
+            category: b.category || cur.category,
+            date: cur.date || today,
+            finishedDate: itemStatus === 'completed' ? (cur.finishedDate || today) : undefined,
+            status: cur.status === 'completed' ? 'completed' : itemStatus,
+          };
+          updateCount++;
+        } else {
+          nid += 1;
+          newItems.push({
+            id: nid,
+            type: 'book',
+            title: b.title,
+            creator: b.author,
+            date: today,
+            rating: 0,
+            status: itemStatus,
+            wereadBookId: b.bookId,
+            category: b.category,
+            finishedDate: itemStatus === 'completed' ? today : undefined,
+          });
+          newCount++;
+        }
+      }
+
+      console.log(`📚 书库同步完成: ${newCount} 本新书, ${updateCount} 本更新`);
+      return [...newItems, ...next];
+    });
+    return { newCount: 0, updateCount: 0 }; // 实际数量在 setItems callback 里
+  }, []);
+
+  return { items, addItem, addItems, updateItem, deleteItem, byType, stats, upsertWereadImports, upsertWereadBooks };
 }

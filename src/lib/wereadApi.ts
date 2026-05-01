@@ -47,6 +47,19 @@ export interface WereadImportPayload {
   highlights: WereadHighlightEntry[];
 }
 
+/** 微信读书书架书目 — 不含划线 */
+export interface WereadBookPayload {
+  bookId: string;
+  title: string;
+  author: string;
+  /** 阅读状态：1-在读, 2-读完, 3-想读, 4-暂停 */
+  readStatus: 1 | 2 | 3 | 4;
+  /** 分类标签（微信读书的分类，如"心理学""育儿"等） */
+  category?: string;
+  /** 封面 URL */
+  cover?: string;
+}
+
 function formatApiTime(sec: unknown): string {
   if (typeof sec === 'number' && sec > 1e9) {
     const d = new Date(sec * 1000);
@@ -131,4 +144,57 @@ export async function fetchWereadImports(): Promise<{
   }
 
   return { payloads, bookCount: payloads.length, markCount };
+}
+
+/**
+ * 拉取微信读书书架书目（书名、作者、阅读状态）。
+ * 不包含划线笔记，仅用于同步「读了什么书」到 Library。
+ * 仅在开发环境（Vite 代理）下可用。
+ */
+export async function fetchWereadBookshelf(): Promise<{
+  books: WereadBookPayload[];
+  total: number;
+}> {
+  if (!isWereadApiAvailable()) {
+    throw new Error(
+      '当前为静态部署环境，浏览器无法直连微信读书接口。请在本机运行 npm run dev 后操作。'
+    );
+  }
+
+  await touchOrigin();
+
+  const nbRes = await fetchWeread(iUrl('/user/notebooks'));
+  if (!nbRes.ok) {
+    throw new Error(`书架请求失败 (${nbRes.status})，请检查 Cookie 是否过期`);
+  }
+  const nbJson = (await nbRes.json()) as {
+    books?: Array<{
+      book?: { bookId?: string; title?: string; author?: string; cover?: string };
+      /** 阅读状态：1-在读 2-读完 3-想读 4-暂停 */
+      type?: number;
+    }>;
+  };
+
+  const rawBooks = nbJson.books ?? [];
+  const books: WereadBookPayload[] = [];
+  const seenIds = new Set<string>();
+
+  for (const wrap of rawBooks) {
+    const b = wrap.book;
+    if (!b?.bookId) continue;
+    const bookId = String(b.bookId);
+    if (seenIds.has(bookId)) continue;
+    seenIds.add(bookId);
+    const rs = wrap.type ?? 1;
+    if (rs < 1 || rs > 4) continue; // 跳过未知状态
+    books.push({
+      bookId,
+      title: String(b.title ?? '未知书名'),
+      author: String(b.author ?? ''),
+      readStatus: rs as 1 | 2 | 3 | 4,
+      cover: b.cover,
+    });
+  }
+
+  return { books, total: books.length };
 }

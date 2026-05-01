@@ -96,6 +96,10 @@ export interface LibraryItem {
   wereadBookId?: string;
   /** API 导入的划线列表（Daily Quote 优先从此读取） */
   wereadHighlights?: WereadHighlightEntry[];
+  /** 书籍分类（如心理学、育儿、理财等），从微信读书同步 */
+  category?: string;
+  /** 阅读完成日期，从微信读书同步 */
+  finishedDate?: string;
 }
 
 export interface JournalEntry {

@@ -3,7 +3,8 @@ import { useLibrary } from '../hooks';
 import { useToday } from '../hooks';
 import type { LibraryItem, WereadHighlightEntry } from '../types';
 import { getWereadCookie, setWereadCookie } from '../lib/wereadCookie';
-import { fetchWereadImports, isWereadApiAvailable } from '../lib/wereadApi';
+import { fetchWereadImports, fetchWereadBookshelf, isWereadApiAvailable } from '../lib/wereadApi';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, CartesianGrid } from 'recharts';
 
 const TYPE_CONFIG = {
   book: { label: 'Book', labelCN: '读书', color: '#7C9885', icon: '📚' },
@@ -286,7 +287,7 @@ function buildWereadExportJson(items: LibraryItem[]): string {
 
 export default function LibraryPage() {
   const { todayStr } = useToday();
-  const { items, addItem, addItems, deleteItem, byType, stats, upsertWereadImports } = useLibrary();
+  const { items, addItem, addItems, deleteItem, byType, stats, upsertWereadImports, upsertWereadBooks } = useLibrary();
 
   const [activeTab, setActiveTab] = useState<ItemType | 'all'>('all');
   const [showAddForm, setShowAddForm] = useState(false);
@@ -311,6 +312,8 @@ export default function LibraryPage() {
   const [wereadLoading, setWereadLoading] = useState(false);
   const [wereadError, setWereadError] = useState('');
   const [wereadOk, setWereadOk] = useState('');
+  const [bookshelfLoading, setBookshelfLoading] = useState(false);
+  const [bookshelfResult, setBookshelfResult] = useState('');
 
   useEffect(() => {
     setWereadCookieInput(getWereadCookie());
@@ -338,6 +341,25 @@ export default function LibraryPage() {
       setWereadError(e instanceof Error ? e.message : String(e));
     } finally {
       setWereadLoading(false);
+    }
+  };
+
+  /** 拉取微信读书书架书目（不包含划线） */
+  const handleWereadBookshelfSync = async () => {
+    setBookshelfResult('');
+    setBookshelfLoading(true);
+    try {
+      const { books, total } = await fetchWereadBookshelf();
+      if (total === 0) {
+        setBookshelfResult('书架为空，或 Cookie 可能已过期');
+        return;
+      }
+      upsertWereadBooks(books);
+      setBookshelfResult(`✅ 同步完成，共获取 ${total} 本书`);
+    } catch (e) {
+      setBookshelfResult(`❌ ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setBookshelfLoading(false);
     }
   };
 
@@ -371,6 +393,53 @@ export default function LibraryPage() {
     if (activeTab === 'all') return items;
     return items.filter((i) => i.type === activeTab);
   }, [items, activeTab]);
+
+  // ===== 阅读统计 =====
+  const readingStats = useMemo(() => {
+    const books = items.filter((i) => i.type === 'book');
+    const completed = books.filter((i) => i.status === 'completed');
+    const reading = books.filter((i) => i.status === 'reading' || i.status === 'in_progress');
+
+    // 年度统计
+    const yearMap: Record<string, number> = {};
+    for (const b of completed) {
+      const year = (b.finishedDate || b.date).slice(0, 4);
+      yearMap[year] = (yearMap[year] || 0) + 1;
+    }
+    const yearlyData = Object.entries(yearMap)
+      .sort(([a], [b]) => Number(a) - Number(b))
+      .map(([year, count]) => ({ year, count }));
+
+    // 当年月度统计
+    const thisYear = new Date().getFullYear().toString();
+    const monthMap: Record<string, number> = {};
+    for (const b of completed) {
+      const d = b.finishedDate || b.date;
+      if (d.startsWith(thisYear)) {
+        const m = String(Number(d.slice(5, 7)));
+        monthMap[m] = (monthMap[m] || 0) + 1;
+      }
+    }
+    const monthLabels = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+    const monthlyData = monthLabels.map((label, i) => ({
+      month: label,
+      count: monthMap[String(i + 1)] || 0,
+    }));
+
+    // 计算今年阅读量
+    const thisYearCompleted = completed.filter(
+      (b) => (b.finishedDate || b.date).startsWith(thisYear)
+    ).length;
+
+    return {
+      totalBooks: books.length,
+      completedBooks: completed.length,
+      readingBooks: reading.length,
+      thisYearCompleted,
+      yearlyData,
+      monthlyData,
+    };
+  }, [items]);
 
   const handleAdd = () => {
     if (!newItem.title.trim()) return;
@@ -490,6 +559,65 @@ export default function LibraryPage() {
         ))}
       </div>
 
+      {/* 阅读统计 */}
+      {readingStats.totalBooks > 0 && (
+        <div className="card-base p-4 space-y-4">
+          <div className="text-[14px] font-semibold text-[var(--text-primary)]">阅读统计</div>
+
+          {/* 总览卡片 */}
+          <div className="grid grid-cols-4 gap-3">
+            <div className="text-center p-2 rounded-xl bg-[var(--bg-subtle)]">
+              <div className="text-lg font-bold" style={{ color: '#7C9885' }}>{readingStats.totalBooks}</div>
+              <div className="text-[10px] text-[var(--text-muted)]">总书目</div>
+            </div>
+            <div className="text-center p-2 rounded-xl bg-[var(--bg-subtle)]">
+              <div className="text-lg font-bold" style={{ color: 'var(--success)' }}>{readingStats.completedBooks}</div>
+              <div className="text-[10px] text-[var(--text-muted)]">已读完</div>
+            </div>
+            <div className="text-center p-2 rounded-xl bg-[var(--bg-subtle)]">
+              <div className="text-lg font-bold" style={{ color: 'var(--info)' }}>{readingStats.readingBooks}</div>
+              <div className="text-[10px] text-[var(--text-muted)]">在读中</div>
+            </div>
+            <div className="text-center p-2 rounded-xl bg-[var(--bg-subtle)]">
+              <div className="text-lg font-bold" style={{ color: '#5B9BD5' }}>{readingStats.thisYearCompleted}</div>
+              <div className="text-[10px] text-[var(--text-muted)]">今年读完</div>
+            </div>
+          </div>
+
+          {/* 图表区域 */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* 年度阅读量柱状图 */}
+            {readingStats.yearlyData.length > 0 && (
+              <div>
+                <div className="text-[11px] text-[var(--text-muted)] mb-2">年度阅读量</div>
+                <ResponsiveContainer width="100%" height={140}>
+                  <BarChart data={readingStats.yearlyData} margin={{ top: 4, right: 8, bottom: 4, left: -12 }}>
+                    <XAxis dataKey="year" tick={{ fontSize: 10, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                    <Bar dataKey="count" radius={[4, 4, 0, 0]} fill="#7C9885" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            {/* 当年月度趋势 */}
+            <div>
+              <div className="text-[11px] text-[var(--text-muted)] mb-2">今年月度阅读趋势</div>
+              <ResponsiveContainer width="100%" height={140}>
+                <LineChart data={readingStats.monthlyData} margin={{ top: 4, right: 8, bottom: 4, left: -12 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="month" tick={{ fontSize: 9, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} interval={1} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={{ fontSize: 11, borderRadius: 8 }} />
+                  <Line type="monotone" dataKey="count" stroke="#5B9BD5" strokeWidth={2} dot={{ r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Tab Bar + Action Buttons */}
       <div className="flex items-center gap-2 flex-wrap">
         <div className="flex gap-1 bg-[var(--bg-subtle)] p-1 rounded-xl">
@@ -586,9 +714,19 @@ export default function LibraryPage() {
             >
               {wereadLoading ? '拉取中…' : '从微信读书拉取划线'}
             </button>
+            <button
+              type="button"
+              onClick={handleWereadBookshelfSync}
+              disabled={bookshelfLoading || !wereadCookieInput.trim() || !isWereadApiAvailable()}
+              className="btn-save text-[12px] disabled:opacity-50"
+              style={{ background: '#5B9BD5' }}
+            >
+              {bookshelfLoading ? '同步中…' : '拉取已读书目'}
+            </button>
           </div>
           {wereadError && <div className="text-[12px] text-[var(--danger)]">{wereadError}</div>}
           {wereadOk && <div className="text-[12px] text-[var(--success)]">{wereadOk}</div>}
+          {bookshelfResult && <div className="text-[12px]" style={{ color: bookshelfResult.startsWith('✅') ? 'var(--success)' : 'var(--danger)' }}>{bookshelfResult}</div>}
 
           {wereadFlatList.length > 0 && (
             <div className="pt-2 border-t border-[var(--border)]">
