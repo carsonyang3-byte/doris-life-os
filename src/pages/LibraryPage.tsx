@@ -305,6 +305,11 @@ export default function LibraryPage() {
     note: '',
   });
 
+  const [editItem, setEditItem] = useState<{
+    id: number; type: ItemType; title: string; creator: string;
+    date: string; rating: number; status: ItemStatus; note: string;
+  } | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [wereadCookieInput, setWereadCookieInput] = useState('');
@@ -454,6 +459,19 @@ export default function LibraryPage() {
       note: '',
     });
     setShowAddForm(false);
+  };
+
+  const handleEdit = () => {
+    if (!editItem || !editItem.title.trim()) return;
+    updateItem(editItem.id, {
+      title: editItem.title,
+      creator: editItem.creator,
+      date: editItem.date,
+      rating: editItem.rating,
+      status: editItem.status,
+      note: editItem.note,
+    });
+    setEditItem(null);
   };
 
   const handleParseImport = () => {
@@ -928,6 +946,73 @@ export default function LibraryPage() {
         </div>
       )}
 
+      {/* Edit Modal */}
+      {editItem && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setEditItem(null)}>
+          <div className="card-base w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-[15px] font-semibold text-[var(--text-primary)] mb-4">编辑记录</h3>
+            <div className="flex flex-col gap-3">
+              <input
+                type="text"
+                className="today-input"
+                placeholder="名称"
+                value={editItem.title}
+                onChange={(e) => setEditItem({ ...editItem, title: e.target.value })}
+              />
+              <input
+                type="text"
+                className="today-input"
+                placeholder="作者"
+                value={editItem.creator}
+                onChange={(e) => setEditItem({ ...editItem, creator: e.target.value })}
+              />
+              <select
+                className="today-input"
+                value={editItem.status}
+                onChange={(e) => setEditItem({ ...editItem, status: e.target.value as ItemStatus })}
+              >
+                <option value="completed">已读完</option>
+                <option value="reading">在读</option>
+                <option value="in_progress">进行中</option>
+                <option value="abandoned">弃了</option>
+              </select>
+              <input
+                type="date"
+                className="today-input"
+                value={editItem.date}
+                onChange={(e) => setEditItem({ ...editItem, date: e.target.value })}
+              />
+              <div>
+                <span className="text-[11px] text-[var(--text-muted)] block mb-1.5">评分</span>
+                <div className="flex gap-0.5">
+                  {[1, 2, 3, 4, 5].map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => setEditItem({ ...editItem, rating: s === editItem.rating ? 0 : s })}
+                      className="text-[16px] transition-transform hover:scale-110"
+                      style={{ opacity: s <= editItem.rating ? 1 : 0.25 }}
+                    >
+                      ★
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <textarea
+                className="today-input resize-none"
+                rows={2}
+                placeholder="简短感想"
+                value={editItem.note}
+                onChange={(e) => setEditItem({ ...editItem, note: e.target.value })}
+              />
+              <div className="flex gap-2 mt-2">
+                <button onClick={() => setEditItem(null)} className="btn-sm flex-1">取消</button>
+                <button onClick={handleEdit} className="btn-save flex-1">保存</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Items List */}
       <div className="flex flex-col gap-3">
         {filteredItems.length === 0 ? (
@@ -980,6 +1065,19 @@ export default function LibraryPage() {
                   <div className="text-[10px] text-[var(--text-muted)] mt-2">{item.date}</div>
                 </div>
                 <div className="flex gap-1 shrink-0">
+                  <button
+                    onClick={() => setEditItem({
+                      id: item.id, type: item.type as ItemType,
+                      title: item.title, creator: item.creator || '',
+                      date: item.date || todayStr,
+                      rating: item.rating || 0,
+                      status: item.status as ItemStatus,
+                      note: item.note || '',
+                    })}
+                    className="w-7 h-7 rounded-md text-[11px] text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--text-primary)] transition-colors"
+                  >
+                    ✎
+                  </button>
                   <button
                     onClick={() => deleteItem(item.id)}
                     className="w-7 h-7 rounded-md text-[11px] text-[var(--text-muted)] hover:bg-[var(--bg-hover)] hover:text-[var(--danger)] transition-colors"
