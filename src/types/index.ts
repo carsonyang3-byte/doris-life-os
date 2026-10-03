@@ -74,7 +74,7 @@ export interface Quote {
   author: string;
 }
 
-export type PageType = 'dashboard' | 'reflect' | 'goals' | 'library' | 'journal' | 'money' | 'travel' | 'settings';
+export type PageType = 'dashboard' | 'reflect' | 'goals' | 'library' | 'journal' | 'money' | 'travel' | 'kitchen' | 'settings';
 
 /** 单条微信读书划线（与 Library 中书关联） */
 export interface WereadHighlightEntry {
@@ -159,4 +159,78 @@ export interface TravelJournalEntry {
   photos: string[];        // 照片（base64 数组）
   rating?: number;         // 当天评分 1-5
   createdAt: number;
+}
+
+// ===== Kitchen Types =====
+
+/**
+ * 视频来源平台。
+ *
+ * 注：`'manual'`（自己手打的菜）已并入 `'legacy'` —— 2026-10-03 用户决定，
+ * 手打的菜跟历史菜谱算一类，不单列一个分类。
+ * 保留这个值只为兼容旧数据，载入时会自动归一；新数据不再产生。
+ */
+export type RecipePlatform = 'bilibili' | 'douyin' | 'xiaohongshu' | 'weibo' | 'youtube' | 'legacy' | 'manual' | 'other';
+
+/** 菜谱状态：想做 / 做过 / 不要再提 */
+export type RecipeStatus = 'want' | 'cooked' | 'never';
+
+/** 主料（筛选维度，也是 AI 排菜时轮换蛋白质的依据） */
+export type MainIngredient =
+  | 'pork' | 'beef' | 'lamb' | 'chicken' | 'duck_goose'
+  | 'fish' | 'shellfish' | 'egg' | 'tofu' | 'mushroom' | 'leafy' | 'other';
+
+/** 蛋白档位：主荤 / 半荤 / 素 —— 排菜判断用，卡片角标显示 */
+export type ProteinTier = 'main' | 'semi' | 'veg';
+
+/** 解析状态 */
+export type ParseStatus = 'pending' | 'parsed' | 'partial' | 'failed' | 'manual';
+
+/** 菜谱来源：用户收藏的视频 / 历史菜谱池 / 自己手打 */
+export type RecipeSource = 'video' | 'legacy' | 'manual';
+
+export interface Recipe {
+  id: number;
+  title: string;              // 菜名
+  url: string;                // 视频链接
+  platform: RecipePlatform;   // 来源平台
+  ingredients: string[];      // 已确认食材（采购清单只认它）
+  cuisine?: string;           // 菜系：粤式/日式/西式...
+  status: RecipeStatus;       // 状态
+  lastCooked?: string;        // 上次做的日期 YYYY-MM-DD
+  note?: string;              // 备注（AI 排菜会读）
+  createdAt: number;
+
+  // ---- 以下为新增字段，全部 optional，老数据无需迁移 ----
+  mainIngredient?: MainIngredient;  // 主料
+  proteinTier?: ProteinTier;        // 蛋白档位
+  isSoup?: boolean;                 // 是否汤羹（广式滚汤算一道菜、算蛋白来源）
+  tags?: string[];                  // 自由标签：容易做 / 一锅熟 / 下饭 …
+  source?: RecipeSource;            // 来源
+  parseStatus?: ParseStatus;        // 解析状态
+  parsedAt?: number;                // 解析时间
+  thumbnail?: string;               // 视频封面
+  pendingIngredients?: string[];    // 待确认食材（标黄，不进采购清单）
+  manual?: boolean;                 // 用户手加的菜，AI 重排时不覆盖
+}
+
+/** 菜单中的一天 */
+export interface MealPlanDay {
+  date: string;               // YYYY-MM-DD
+  label: string;              // 周一 / 周二 ...
+  recipeIds: number[];        // 当天安排的菜谱 id
+  manualIds?: number[];       // 我手动加进这一天的菜 —— 重排时保留、不覆盖
+  customText?: string;        // 手写补充（外卖、外出吃等）
+}
+
+export interface MealPlan {
+  weekStart: string;          // 该周周一 YYYY-MM-DD
+  days: MealPlanDay[];
+}
+
+/** 采购清单条目 */
+export interface ShoppingItem {
+  name: string;               // 食材名
+  recipeTitles: string[];     // 来自哪些菜
+  checked?: boolean;          // 是否已买
 }
