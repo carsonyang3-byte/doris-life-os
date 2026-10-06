@@ -25,6 +25,27 @@ export function detectPlatform(url: string): RecipePlatform {
   return 'other';
 }
 
+/**
+ * 尝试读取 YouTube 视频标题。
+ * 用 noembed.com 做跨域 oEmbed 代理；失败或超时时返回空字符串。
+ */
+async function fetchYouTubeTitle(url: string): Promise<string> {
+  try {
+    const controller = new AbortController();
+    const t = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(
+      `https://noembed.com/embed?url=${encodeURIComponent(url)}&format=json`,
+      { signal: controller.signal }
+    );
+    clearTimeout(t);
+    if (!res.ok) return '';
+    const data = await res.json();
+    return typeof data.title === 'string' ? data.title.trim() : '';
+  } catch {
+    return '';
+  }
+}
+
 export const PLATFORM_LABEL: Record<RecipePlatform, string> = {
   bilibili: 'B站',
   douyin: '抖音',
@@ -110,25 +131,37 @@ export function useKitchen() {
     ]);
   };
 
-  /** 批量添加：只需菜名 + 链接 */
-  const addRecipesByLinks = (links: { title: string; url: string }[]) => {
-    setRecipes((prev) => {
-      const existing = new Set(prev.map((r) => r.url));
-      const base = Date.now();
-      const added = links
-        .filter((l) => l.url && !existing.has(l.url))
-        .map((l, i) => ({
-          id: base + i,
-          title: l.title || '未命名',
-          url: l.url,
-          platform: detectPlatform(l.url),
-          ingredients: [],
-          status: 'want' as const,
-          createdAt: base + i,
-          source: 'video' as const,
-        }));
-      return [...added, ...prev];
-    });
+  /** 批量添加：只需菜名 + 链接。YouTube 链接会自动读取标题。 */
+  const addRecipesByLinks = async (links: { title: string; url: string }[]) => {
+    const existing = new Set(recipes.map((r) => r.url));
+    const newLinks = links.filter((l) => l.url && !existing.has(l.url));
+    if (newLinks.length === 0) return 0;
+
+    const base = Date.now();
+    const titles = await Promise.all(
+      newLinks.map(async (l) => {
+        if (l.title.trim()) return l.title.trim();
+        if (detectPlatform(l.url) === 'youtube') {
+          const fetched = await fetchYouTubeTitle(l.url);
+          return fetched || l.title.trim() || '未命名';
+        }
+        return l.title.trim() || '未命名';
+      })
+    );
+
+    const added: Recipe[] = newLinks.map((l, i) => ({
+      id: base + i,
+      title: titles[i],
+      url: l.url,
+      platform: detectPlatform(l.url),
+      ingredients: [],
+      status: 'want' as const,
+      createdAt: base + i,
+      source: 'video' as const,
+    }));
+
+    setRecipes((prev) => [...added, ...prev]);
+    return added.length;
   };
 
   /**

@@ -106,6 +106,8 @@ function RecipeLibrary({ K }: { K: Kitchen }) {
   const [draft, setDraft] = useState('');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [importMsg, setImportMsg] = useState('');
+  const [addMsg, setAddMsg] = useState('');
+  const [addLoading, setAddLoading] = useState(false);
   /** 批量删除：勾中的菜谱 id */
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -180,7 +182,7 @@ function RecipeLibrary({ K }: { K: Kitchen }) {
     setTimeout(() => setImportMsg(''), 3000);
   };
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     const lines = draft
       .split('\n')
       .map((l) => l.trim())
@@ -191,14 +193,23 @@ function RecipeLibrary({ K }: { K: Kitchen }) {
         if (!urlMatch) return null;
         const url = urlMatch[0];
         const title = line.replace(url, '').replace(/[|\-—,，\s]+$/, '').trim();
-        return { title: title || '未命名', url };
+        return { title: title || '', url };
       })
       .filter((x): x is { title: string; url: string } => !!x);
 
     if (parsed.length === 0) return;
-    K.addRecipesByLinks(parsed);
-    setDraft('');
-    setShowAdd(false);
+    setAddLoading(true);
+    try {
+      const n = await K.addRecipesByLinks(parsed);
+      setAddMsg(`已添加 ${n} 条，YouTube 视频标题已自动读取`);
+      setDraft('');
+      setShowAdd(false);
+    } catch (e) {
+      setAddMsg('添加失败，请重试');
+    } finally {
+      setAddLoading(false);
+      setTimeout(() => setAddMsg(''), 3000);
+    }
   };
 
   /** 勾中 / 取消勾中一道菜（批量删除用） */
@@ -381,16 +392,20 @@ function RecipeLibrary({ K }: { K: Kitchen }) {
               className="w-full px-3 py-2 rounded-xl text-[12px] border outline-none resize-y"
               style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text-primary)', fontFamily: "'Inter', sans-serif" }}
             />
+            {addMsg && (
+              <p className="text-[11px] mt-2" style={{ color: 'var(--accent-dark)' }}>{addMsg}</p>
+            )}
             <div className="flex gap-2 mt-2">
               <button
                 onClick={handleAdd}
-                className="px-3.5 py-2 rounded-xl text-[12px] font-medium text-white cursor-pointer border-none"
+                disabled={addLoading}
+                className="px-3.5 py-2 rounded-xl text-[12px] font-medium text-white cursor-pointer border-none disabled:opacity-60"
                 style={{ background: 'var(--accent)' }}
               >
-                确认添加
+                {addLoading ? '读取中…' : '确认添加'}
               </button>
               <button
-                onClick={() => { setShowAdd(false); setDraft(''); }}
+                onClick={() => { setShowAdd(false); setDraft(''); setAddMsg(''); }}
                 className="px-3.5 py-2 rounded-xl text-[12px] cursor-pointer border-none"
                 style={{ background: 'transparent', color: 'var(--text-muted)' }}
               >
