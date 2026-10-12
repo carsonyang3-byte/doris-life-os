@@ -4,6 +4,8 @@ import {
 import {
   Plus, Search, Trash2, ExternalLink, Check, X, Copy, Pencil,
   ShoppingCart, Calendar, RotateCcw, Download, AlertTriangle, CornerDownLeft,
+  ChevronLeft, ChevronRight, Move, BarChart3, UtensilsCrossed, Beef, Palette,
+  Carrot, Globe, Repeat,
 } from 'lucide-react';
 import type {
   Recipe, RecipePlatform, RecipeStatus, MainIngredient, ProteinTier,
@@ -12,6 +14,8 @@ import {
   useKitchen, PLATFORM_LABEL, MAIN_INGREDIENT_LABEL, MAIN_INGREDIENT_ORDER,
   PROTEIN_TIER_LABEL, defaultTierOf, detectPlatform,
 } from '../hooks/useKitchen';
+import { toDateStr, getWeekStart } from '../lib/mealPlan';
+import { computeStats, planDateRange } from '../lib/kitchenStats';
 
 const SERIF = "'Cormorant Garamond', 'Noto Serif SC', Georgia, serif";
 
@@ -41,7 +45,7 @@ export const dishLink = (r: Recipe): string => r.url || youtubeSearchUrl(r.title
 export const dishLinkHint = (r: Recipe): string =>
   r.url ? `看视频（${PLATFORM_LABEL[r.platform]}）` : `YouTube 搜索「${r.title}」`;
 
-type Tab = 'recipes' | 'plan' | 'shopping';
+type Tab = 'recipes' | 'plan' | 'shopping' | 'stats';
 
 export default function KitchenPage() {
   const K = useKitchen();
@@ -51,6 +55,7 @@ export default function KitchenPage() {
     { key: 'recipes', label: '菜谱库', count: K.stats.total },
     { key: 'plan', label: '本周菜单', count: K.stats.planned },
     { key: 'shopping', label: '采购清单', count: K.shoppingList.length },
+    { key: 'stats', label: '统计', count: 0 },
   ];
 
   return (
@@ -87,6 +92,7 @@ export default function KitchenPage() {
       {tab === 'recipes' && <RecipeLibrary K={K} />}
       {tab === 'plan' && <WeekPlan K={K} />}
       {tab === 'shopping' && <ShoppingList K={K} />}
+      {tab === 'stats' && <StatsPanel K={K} />}
     </div>
   );
 }
@@ -102,12 +108,15 @@ function RecipeLibrary({ K }: { K: Kitchen }) {
   const [cuisine, setCuisine] = useState<string>('all');
   const [status, setStatus] = useState<RecipeStatus | 'all'>('all');
   const [tag, setTag] = useState<string>('all');
+  const [videoFilter, setVideoFilter] = useState<'all' | 'video'>('all');
   const [showAdd, setShowAdd] = useState(false);
   const [draft, setDraft] = useState('');
   const [editingId, setEditingId] = useState<number | null>(null);
   const [importMsg, setImportMsg] = useState('');
   const [addMsg, setAddMsg] = useState('');
   const [addLoading, setAddLoading] = useState(false);
+  const [previewList, setPreviewList] = useState<Omit<Recipe, 'id' | 'createdAt'>[]>([]);
+  const [showPreview, setShowPreview] = useState(false);
   /** 批量删除：勾中的菜谱 id */
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -118,6 +127,7 @@ function RecipeLibrary({ K }: { K: Kitchen }) {
     const kw = keyword.trim().toLowerCase();
     return K.recipes.filter((r) => {
       if (platform !== 'all' && r.platform !== platform) return false;
+      if (videoFilter === 'video' && !r.url) return false;
       if (main !== 'all' && r.mainIngredient !== main) return false;
       if (cuisine !== 'all' && (r.cuisine || '').trim() !== cuisine) return false;
       if (status !== 'all' && r.status !== status) return false;
@@ -131,7 +141,7 @@ function RecipeLibrary({ K }: { K: Kitchen }) {
         r.ingredients.some((i) => i.toLowerCase().includes(kw))
       );
     });
-  }, [K.recipes, keyword, platform, main, cuisine, status, tag]);
+  }, [K.recipes, keyword, platform, videoFilter, main, cuisine, status, tag]);
 
   const usedPlatforms = useMemo(() => {
     const s = new Set<RecipePlatform>();
@@ -162,13 +172,14 @@ function RecipeLibrary({ K }: { K: Kitchen }) {
   const resetFilters = () => {
     setKeyword('');
     setPlatform('all');
+    setVideoFilter('all');
     setMain('all');
     setCuisine('all');
     setStatus('all');
     setTag('all');
   };
 
-  const hasFilter = platform !== 'all' || main !== 'all' || cuisine !== 'all' || status !== 'all' || tag !== 'all' || !!keyword.trim();
+  const hasFilter = platform !== 'all' || videoFilter !== 'all' || main !== 'all' || cuisine !== 'all' || status !== 'all' || tag !== 'all' || !!keyword.trim();
 
   /**
    * 实际铺出来的列表：没筛选、也没点「查看全部」时，只铺前几道。
@@ -200,16 +211,33 @@ function RecipeLibrary({ K }: { K: Kitchen }) {
     if (parsed.length === 0) return;
     setAddLoading(true);
     try {
-      const n = await K.addRecipesByLinks(parsed);
-      setAddMsg(`已添加 ${n} 条，YouTube 视频标题已自动读取`);
-      setDraft('');
-      setShowAdd(false);
+      const previews = await K.previewRecipesByLinks(parsed);
+      if (previews.length === 0) {
+        setAddMsg('这些链接都已经在库里了');
+      } else {
+        setPreviewList(previews);
+        setShowPreview(true);
+        setDraft('');
+        setShowAdd(false);
+      }
     } catch (e) {
-      setAddMsg('添加失败，请重试');
+      setAddMsg('读取失败，请重试');
     } finally {
       setAddLoading(false);
       setTimeout(() => setAddMsg(''), 3000);
     }
+  };
+
+  const handleSavePreviews = () => {
+    const n = K.addRecipePreviews(previewList);
+    setAddMsg(`已添加 ${n} 条菜谱`);
+    setShowPreview(false);
+    setPreviewList([]);
+    setTimeout(() => setAddMsg(''), 3000);
+  };
+
+  const updatePreview = (idx: number, updates: Partial<Omit<Recipe, 'id' | 'createdAt'>>) => {
+    setPreviewList((prev) => prev.map((p, i) => (i === idx ? { ...p, ...updates } : p)));
   };
 
   /** 勾中 / 取消勾中一道菜（批量删除用） */
@@ -282,6 +310,15 @@ function RecipeLibrary({ K }: { K: Kitchen }) {
                   label={`${PLATFORM_LABEL[p]} ${K.recipes.filter((r) => r.platform === p).length}`}
                 />
               ))}
+            </FilterRow>
+
+            <FilterRow title="视频">
+              <Chip active={videoFilter === 'all'} onClick={() => setVideoFilter('all')} label="全部" />
+              <Chip
+                active={videoFilter === 'video'}
+                onClick={() => setVideoFilter('video')}
+                label={`有视频 ${K.recipes.filter((r) => !!r.url).length}`}
+              />
             </FilterRow>
 
             {usedMains.length > 0 && (
@@ -382,7 +419,7 @@ function RecipeLibrary({ K }: { K: Kitchen }) {
         {showAdd && (
           <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
             <p className="text-[11px] mb-2" style={{ color: 'var(--text-muted)' }}>
-              每行一条，可直接粘链接；也可以写成「菜名 链接」。平台会自动识别。
+              每行一条，可直接粘链接；也可以写成「菜名 链接」。YouTube 会先读标题，下一步让你确认。
             </p>
             <textarea
               value={draft}
@@ -402,7 +439,7 @@ function RecipeLibrary({ K }: { K: Kitchen }) {
                 className="px-3.5 py-2 rounded-xl text-[12px] font-medium text-white cursor-pointer border-none disabled:opacity-60"
                 style={{ background: 'var(--accent)' }}
               >
-                {addLoading ? '读取中…' : '确认添加'}
+                {addLoading ? '读取中…' : '下一步：预览'}
               </button>
               <button
                 onClick={() => { setShowAdd(false); setDraft(''); setAddMsg(''); }}
@@ -415,6 +452,127 @@ function RecipeLibrary({ K }: { K: Kitchen }) {
           </div>
         )}
       </div>
+
+      {/* 预览/修正弹窗 */}
+      {showPreview && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.35)' }}
+          onClick={() => setShowPreview(false)}
+        >
+          <div
+            className="rounded-2xl p-4 w-full max-w-2xl max-h-[80vh] overflow-y-auto"
+            style={{ background: 'var(--bg-card)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[13px] font-medium" style={{ color: 'var(--text-primary)' }}>
+                确认后再保存（{previewList.length} 条）
+              </span>
+              <button
+                onClick={() => setShowPreview(false)}
+                className="p-1 rounded-lg cursor-pointer border-none bg-transparent"
+                style={{ color: 'var(--text-muted)' }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+            <p className="text-[11px] mb-3" style={{ color: 'var(--text-muted)' }}>
+              YouTube 标题已经自动清洗过，菜名不对的你可以直接改；食材、菜系、主料建议也顺手补上，这样排菜和采购清单才准。
+            </p>
+            <div className="flex flex-col gap-3">
+              {previewList.map((p, i) => (
+                <div
+                  key={i}
+                  className="rounded-xl p-3 flex flex-col gap-2"
+                  style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}
+                >
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(201,169,110,0.12)', color: 'var(--accent-dark)' }}>
+                      {PLATFORM_LABEL[p.platform]}
+                    </span>
+                    <a
+                      href={p.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[10px] truncate max-w-[200px]"
+                      style={{ color: 'var(--text-muted)' }}
+                    >
+                      {p.url}
+                    </a>
+                  </div>
+                  <input
+                    value={p.title}
+                    onChange={(e) => updatePreview(i, { title: e.target.value })}
+                    placeholder="菜名"
+                    className="w-full px-2.5 py-1.5 rounded-lg text-[12px] border outline-none"
+                    style={{ background: 'var(--bg-card)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                  />
+                  <input
+                    value={p.ingredients.join('、')}
+                    onChange={(e) =>
+                      updatePreview(i, {
+                        ingredients: e.target.value.split(/[、,，\s]+/).map((s) => s.trim()).filter(Boolean),
+                      })
+                    }
+                    placeholder="食材，用、分隔"
+                    className="w-full px-2.5 py-1.5 rounded-lg text-[12px] border outline-none"
+                    style={{ background: 'var(--bg-card)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                  />
+                  <div className="flex gap-2">
+                    <input
+                      value={p.cuisine || ''}
+                      onChange={(e) => updatePreview(i, { cuisine: e.target.value.trim() })}
+                      placeholder="菜系"
+                      className="flex-1 px-2.5 py-1.5 rounded-lg text-[12px] border outline-none"
+                      style={{ background: 'var(--bg-card)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                    />
+                    <select
+                      value={p.mainIngredient || 'other'}
+                      onChange={(e) => {
+                        const m = e.target.value as MainIngredient;
+                        updatePreview(i, { mainIngredient: m, proteinTier: defaultTierOf(m) });
+                      }}
+                      className="px-2 py-1.5 rounded-lg text-[12px] border outline-none"
+                      style={{ background: 'var(--bg-card)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                    >
+                      {MAIN_INGREDIENT_ORDER.map((m) => (
+                        <option key={m} value={m}>{MAIN_INGREDIENT_LABEL[m]}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={p.proteinTier || defaultTierOf(p.mainIngredient || 'other')}
+                      onChange={(e) => updatePreview(i, { proteinTier: e.target.value as ProteinTier })}
+                      className="px-2 py-1.5 rounded-lg text-[12px] border outline-none"
+                      style={{ background: 'var(--bg-card)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+                    >
+                      {(['main', 'semi', 'veg'] as ProteinTier[]).map((t) => (
+                        <option key={t} value={t}>{PROTEIN_TIER_LABEL[t]}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={handleSavePreviews}
+                className="px-3.5 py-2 rounded-xl text-[12px] font-medium text-white cursor-pointer border-none"
+                style={{ background: 'var(--accent)' }}
+              >
+                确认保存
+              </button>
+              <button
+                onClick={() => { setShowPreview(false); setPreviewList([]); }}
+                className="px-3.5 py-2 rounded-xl text-[12px] cursor-pointer border-none"
+                style={{ background: 'transparent', color: 'var(--text-muted)' }}
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 列表 */}
       {filtered.length === 0 ? (
@@ -554,6 +712,8 @@ function RecipeCard({
 }) {
   const [ingredientDraft, setIngredientDraft] = useState(recipe.ingredients.join('、'));
   const [tagInput, setTagInput] = useState('');
+  const [showAddToDay, setShowAddToDay] = useState(false);
+  const [addToDayMsg, setAddToDayMsg] = useState('');
 
   const saveIngredients = () => {
     const list = ingredientDraft
@@ -793,10 +953,19 @@ function RecipeCard({
             还没有视频 · 补链接
           </button>
         )}
+        <button
+          onClick={() => { setShowAddToDay((v) => !v); setAddToDayMsg(''); }}
+          className="flex items-center gap-1 text-[11px] cursor-pointer border-none bg-transparent p-0 ml-auto"
+          style={{ color: 'var(--accent-dark)' }}
+          title="把这道菜加到本周菜单的某一天"
+        >
+          <Calendar size={11} />
+          加进菜单
+        </button>
         {recipe.status !== 'cooked' && (
           <button
             onClick={() => K.markCooked(recipe.id)}
-            className="flex items-center gap-1 text-[11px] cursor-pointer border-none bg-transparent ml-auto"
+            className="flex items-center gap-1 text-[11px] cursor-pointer border-none bg-transparent"
             style={{ color: '#6E8B5A' }}
           >
             <Check size={11} />
@@ -804,6 +973,44 @@ function RecipeCard({
           </button>
         )}
       </div>
+
+      {showAddToDay && (
+        <div className="mt-1 pt-2" style={{ borderTop: '1px solid var(--border)' }}>
+          <p className="text-[10px] mb-1.5" style={{ color: 'var(--text-muted)' }}>
+            加到当前周（{K.plan.days[0]?.date.slice(5)} - {K.plan.days[6]?.date.slice(5)}）的某天：
+          </p>
+          <div className="grid grid-cols-7 gap-1">
+            {K.plan.days.map((d) => {
+              const already = d.recipeIds.includes(recipe.id);
+              return (
+                <button
+                  key={d.date}
+                  disabled={already}
+                  onClick={() => {
+                    if (already) return;
+                    const ok = K.addRecipeToDay(d.date, recipe.id);
+                    if (ok) {
+                      setAddToDayMsg(`已加到 ${d.label}`);
+                      setTimeout(() => setAddToDayMsg(''), 1500);
+                    }
+                  }}
+                  className="py-1.5 rounded-lg text-[10px] cursor-pointer border-none disabled:cursor-not-allowed"
+                  style={{
+                    background: already ? 'var(--border)' : 'rgba(201,169,110,0.08)',
+                    color: already ? 'var(--text-muted)' : 'var(--accent-dark)',
+                    opacity: already ? 0.6 : 1,
+                  }}
+                >
+                  {already ? '已在' : d.label}
+                </button>
+              );
+            })}
+          </div>
+          {addToDayMsg && (
+            <p className="text-[10px] mt-1.5" style={{ color: 'var(--accent-dark)' }}>{addToDayMsg}</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -815,6 +1022,8 @@ function WeekPlan({ K }: { K: Kitchen }) {
   const [copyFrom, setCopyFrom] = useState<string | null>(null);
   const [copyTargets, setCopyTargets] = useState<Set<string>>(new Set());
   const [flash, setFlash] = useState('');
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [moveFrom, setMoveFrom] = useState<{ date: string; recipeId: number } | null>(null);
   /** 加菜弹层里「自己打一道菜」的输入 */
   const [manualTitle, setManualTitle] = useState('');
   const [manualIngredients, setManualIngredients] = useState('');
@@ -833,8 +1042,24 @@ function WeekPlan({ K }: { K: Kitchen }) {
     if (K.plan.days.length === 0) return '';
     const a = K.plan.days[0].date;
     const b = K.plan.days[K.plan.days.length - 1].date;
-    return `${a} ~ ${b}`;
+    return `${a.slice(5).replace('-', '.')} - ${b.slice(5).replace('-', '.')}`;
   }, [K.plan]);
+
+  const goPrevWeek = () => {
+    const d = new Date(`${K.currentWeek}T00:00:00`);
+    d.setDate(d.getDate() - 7);
+    K.setWeekStart(toDateStr(d));
+  };
+
+  const goNextWeek = () => {
+    const d = new Date(`${K.currentWeek}T00:00:00`);
+    d.setDate(d.getDate() + 7);
+    K.setWeekStart(toDateStr(d));
+  };
+
+  const goThisWeek = () => {
+    K.setWeekStart(toDateStr(getWeekStart()));
+  };
 
   const pickerDay = K.plan.days.find((d) => d.date === pickerDate);
   const copyDaySrc = K.plan.days.find((d) => d.date === copyFrom);
@@ -887,8 +1112,40 @@ function WeekPlan({ K }: { K: Kitchen }) {
     <div className="flex flex-col gap-3">
       <div className="rounded-2xl p-4 flex items-center justify-between flex-wrap gap-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
         <div className="flex items-center gap-2">
-          <Calendar size={14} style={{ color: 'var(--accent)' }} />
-          <span className="text-[12px]" style={{ color: 'var(--text-secondary)' }}>{range}</span>
+          <button
+            onClick={goPrevWeek}
+            className="p-1.5 rounded-lg cursor-pointer border-none bg-transparent"
+            style={{ color: 'var(--text-muted)' }}
+            title="上一周"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <button
+            onClick={() => setShowCalendar(true)}
+            className="flex items-center gap-1.5 px-2 py-1 rounded-lg cursor-pointer border-none"
+            style={{ background: 'rgba(201,169,110,0.08)' }}
+            title="点击选周"
+          >
+            <Calendar size={13} style={{ color: 'var(--accent-dark)' }} />
+            <span className="text-[12px]" style={{ color: 'var(--accent-dark)' }}>{range}</span>
+          </button>
+          <button
+            onClick={goNextWeek}
+            className="p-1.5 rounded-lg cursor-pointer border-none bg-transparent"
+            style={{ color: 'var(--text-muted)' }}
+            title="下一周"
+          >
+            <ChevronRight size={16} />
+          </button>
+          {K.currentWeek !== toDateStr(getWeekStart()) && (
+            <button
+              onClick={goThisWeek}
+              className="px-2 py-1 rounded-lg text-[11px] cursor-pointer border-none"
+              style={{ background: 'var(--accent)', color: '#fff' }}
+            >
+              本周
+            </button>
+          )}
         </div>
         <div className="flex flex-col items-end gap-1">
           <div className="flex gap-2">
@@ -971,6 +1228,14 @@ function WeekPlan({ K }: { K: Kitchen }) {
                       <span className="truncate">{r.title}</span>
                       <ExternalLink size={10} className="shrink-0 opacity-70" />
                     </a>
+                    <button
+                      onClick={() => setMoveFrom({ date: day.date, recipeId: id })}
+                      className="opacity-60 md:opacity-0 md:group-hover:opacity-100 cursor-pointer border-none bg-transparent p-0 shrink-0"
+                      style={{ color: 'var(--text-muted)' }}
+                      title="移到别的日子"
+                    >
+                      <Move size={11} />
+                    </button>
                     <button
                       onClick={() => K.toggleRecipeInDay(day.date, id)}
                       className="opacity-60 md:opacity-0 md:group-hover:opacity-100 cursor-pointer border-none bg-transparent p-0 shrink-0"
@@ -1106,6 +1371,72 @@ function WeekPlan({ K }: { K: Kitchen }) {
                 取消
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 移动菜品到其它日子 */}
+      {moveFrom && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.35)' }} onClick={() => setMoveFrom(null)}>
+          <div
+            className="rounded-2xl p-4 w-full max-w-sm"
+            style={{ background: 'var(--bg-card)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[13px] font-medium" style={{ color: 'var(--text-primary)' }}>
+                把「{K.recipeMap.get(moveFrom.recipeId)?.title}」移到
+              </span>
+              <button onClick={() => setMoveFrom(null)} className="cursor-pointer border-none bg-transparent" style={{ color: 'var(--text-muted)' }}>
+                <X size={15} />
+              </button>
+            </div>
+            <div className="grid grid-cols-3 gap-2 mb-4">
+              {K.plan.days.map((d) => {
+                const isToday = d.date === moveFrom.date;
+                return (
+                  <button
+                    key={d.date}
+                    disabled={isToday}
+                    onClick={() => {
+                      K.moveRecipe(moveFrom.date, d.date, moveFrom.recipeId);
+                      setMoveFrom(null);
+                    }}
+                    className="py-2 rounded-lg text-[12px] cursor-pointer border-none disabled:opacity-40 disabled:cursor-not-allowed"
+                    style={{
+                      background: isToday ? 'var(--border)' : 'rgba(201,169,110,0.08)',
+                      color: isToday ? 'var(--text-muted)' : 'var(--accent-dark)',
+                    }}
+                  >
+                    {d.label} <span className="text-[10px] opacity-70">{d.date.slice(5)}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
+              移动后这道菜在目标日会保留「手动」标记。
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* 日历选周弹层 */}
+      {showCalendar && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.35)' }} onClick={() => setShowCalendar(false)}>
+          <div
+            className="rounded-2xl p-4 w-full max-w-sm"
+            style={{ background: 'var(--bg-card)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-[13px] font-medium" style={{ color: 'var(--text-primary)' }}>
+                选一周
+              </span>
+              <button onClick={() => setShowCalendar(false)} className="cursor-pointer border-none bg-transparent" style={{ color: 'var(--text-muted)' }}>
+                <X size={15} />
+              </button>
+            </div>
+            <InlineWeekPicker current={K.currentWeek} onPick={(ws) => { K.setWeekStart(ws); setShowCalendar(false); }} />
           </div>
         </div>
       )}
@@ -1258,6 +1589,92 @@ function WeekPlan({ K }: { K: Kitchen }) {
   );
 }
 
+/* ============ 日历选周组件 ============ */
+
+function InlineWeekPicker({ current, onPick }: { current: string; onPick: (weekStart: string) => void }) {
+  const [view, setView] = useState(new Date(`${current}T00:00:00`));
+
+  const year = view.getFullYear();
+  const month = view.getMonth();
+
+  const firstDay = new Date(year, month, 1);
+  const startOffset = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1; // 周一起始
+  const days: Date[] = [];
+  const totalCells = 42; // 6 行 × 7 列
+  for (let i = 0; i < totalCells; i++) {
+    const d = new Date(year, month, 1 - startOffset + i);
+    d.setHours(0, 0, 0, 0);
+    days.push(d);
+  }
+
+  const currentWeekStart = new Date(`${current}T00:00:00`);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const isInCurrentWeek = (d: Date) => {
+    const ws = getWeekStart(d);
+    return ws.getTime() === currentWeekStart.getTime();
+  };
+
+  const handlePick = (d: Date) => {
+    const ws = getWeekStart(d);
+    onPick(toDateStr(ws));
+  };
+
+  return (
+    <div className="w-full">
+      <div className="flex items-center justify-between mb-3">
+        <button
+          onClick={() => setView(new Date(year, month - 1, 1))}
+          className="p-1 rounded-lg cursor-pointer border-none bg-transparent"
+          style={{ color: 'var(--text-muted)' }}
+        >
+          <ChevronLeft size={16} />
+        </button>
+        <span className="text-[13px] font-medium" style={{ color: 'var(--text-primary)' }}>
+          {year} 年 {month + 1} 月
+        </span>
+        <button
+          onClick={() => setView(new Date(year, month + 1, 1))}
+          className="p-1 rounded-lg cursor-pointer border-none bg-transparent"
+          style={{ color: 'var(--text-muted)' }}
+        >
+          <ChevronRight size={16} />
+        </button>
+      </div>
+      <div className="grid grid-cols-7 gap-1 mb-2">
+        {['一', '二', '三', '四', '五', '六', '日'].map((l) => (
+          <div key={l} className="text-center text-[10px]" style={{ color: 'var(--text-muted)' }}>{l}</div>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {days.map((d) => {
+          const isCurrentMonth = d.getMonth() === month;
+          const inCurrentWeek = isInCurrentWeek(d);
+          const isToday = d.getTime() === today.getTime();
+          return (
+            <button
+              key={d.getTime()}
+              onClick={() => handlePick(d)}
+              className="aspect-square rounded-lg text-[12px] cursor-pointer border-none flex items-center justify-center"
+              style={{
+                background: inCurrentWeek ? 'var(--accent)' : isToday ? 'rgba(201,169,110,0.15)' : 'transparent',
+                color: inCurrentWeek ? '#fff' : isCurrentMonth ? 'var(--text-primary)' : 'var(--text-muted)',
+                opacity: isCurrentMonth ? 1 : 0.5,
+              }}
+            >
+              {d.getDate()}
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-[10px] mt-3" style={{ color: 'var(--text-muted)' }}>
+        点任意日期，会自动跳到它所在的那一周（周一开始）。
+      </p>
+    </div>
+  );
+}
+
 /* ============ 采购清单 ============ */
 
 function ShoppingList({ K }: { K: Kitchen }) {
@@ -1367,6 +1784,246 @@ function ShoppingList({ K }: { K: Kitchen }) {
       )}
     </div>
   );
+}
+
+/* ============ 统计面板 ============ */
+
+function StatsPanel({ K }: { K: Kitchen }) {
+  const { range, setRange } = useStatsRange(K);
+  const stats = useMemo(() => {
+    return computeStats(K.plans, K.recipes, range.from, range.to);
+  }, [K.plans, K.recipes, range]);
+
+  const hasData = stats.totalMeals > 0;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="rounded-2xl p-4 flex items-center justify-between flex-wrap gap-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+        <div className="flex items-center gap-2">
+          <BarChart3 size={14} style={{ color: 'var(--accent)' }} />
+          <span className="text-[12px] font-medium" style={{ color: 'var(--text-primary)' }}>吃了什么</span>
+        </div>
+        <div className="flex gap-1.5">
+          <Chip active={range.mode === 'week'} onClick={() => setRange({ mode: 'week' })} label="本周" />
+          <Chip active={range.mode === 'month'} onClick={() => setRange({ mode: 'month' })} label="本月" />
+          <Chip active={range.mode === 'custom'} onClick={() => setRange({ mode: 'custom' })} label="自定义" />
+        </div>
+      </div>
+
+      {range.mode === 'custom' && (
+        <div className="rounded-2xl p-4 flex flex-wrap gap-3" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>从</span>
+            <input
+              type="date"
+              value={range.from}
+              onChange={(e) => setRange({ mode: 'custom', from: e.target.value, to: range.to })}
+              className="px-2.5 py-1.5 rounded-lg text-[12px] border outline-none"
+              style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px]" style={{ color: 'var(--text-muted)' }}>到</span>
+            <input
+              type="date"
+              value={range.to}
+              onChange={(e) => setRange({ mode: 'custom', from: range.from, to: e.target.value })}
+              className="px-2.5 py-1.5 rounded-lg text-[12px] border outline-none"
+              style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--text-primary)' }}
+            />
+          </div>
+        </div>
+      )}
+
+      {!hasData ? (
+        <Empty text={`${range.mode === 'week' ? '本周' : range.mode === 'month' ? '本月' : '所选时间段'}还没排菜，去「本周菜单」先排几餐再来。`} />
+      ) : (
+        <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' }}>
+          <StatCard title="餐桌概览" icon={<UtensilsCrossed size={14} style={{ color: 'var(--accent)' }} />}>
+            <div className="grid grid-cols-2 gap-3 mt-1">
+              <Number value={stats.totalDishes} label="不重复的菜" />
+              <Number value={stats.totalMeals} label="餐次" />
+              <Number value={stats.uniqueIngredients} label="不重复的食材" />
+              <Number value={stats.antiInflammatoryCount} label="抗炎食材" />
+            </div>
+          </StatCard>
+
+          <StatCard title="蛋白质结构" icon={<Beef size={14} style={{ color: 'var(--accent)' }} />}>
+            <div className="flex flex-col gap-2 mt-1">
+              {Object.entries(stats.mainGroups).sort((a, b) => b[1] - a[1]).map(([k, v]) => (
+                <div key={k} className="flex items-center gap-2 text-[11px]">
+                  <span className="w-14 shrink-0" style={{ color: 'var(--text-secondary)' }}>{k}</span>
+                  <div className="flex-1 h-2 rounded-full" style={{ background: 'var(--bg)' }}>
+                    <div
+                      className="h-2 rounded-full"
+                      style={{
+                        width: `${Math.round((v / stats.totalMeals) * 100)}%`,
+                        background: 'var(--accent)',
+                      }}
+                    />
+                  </div>
+                  <span className="w-8 text-right" style={{ color: 'var(--text-muted)' }}>{v}</span>
+                </div>
+              ))}
+            </div>
+          </StatCard>
+
+          <StatCard title="食材颜色盘" icon={<Palette size={14} style={{ color: 'var(--accent)' }} />}>
+            <ColorDonut data={stats.colorGroups} />
+            <div className="flex flex-wrap gap-2 mt-3">
+              {Object.entries(stats.colorGroups).sort((a, b) => b[1] - a[1]).map(([color, count]) => (
+                <span key={color} className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: 'rgba(201,169,110,0.08)', color: 'var(--text-secondary)' }}>
+                  {color} {count}
+                </span>
+              ))}
+            </div>
+          </StatCard>
+
+          <StatCard title="Top 食材" icon={<Carrot size={14} style={{ color: 'var(--accent)' }} />}>
+            <div className="flex flex-col gap-1.5 mt-1">
+              {stats.topIngredients.map((it) => (
+                <div key={it.name} className="flex items-center justify-between text-[11px]">
+                  <span style={{ color: 'var(--text-primary)' }}>
+                    {it.name}
+                    {it.antiInflammatory && <span className="ml-1 text-[9px]" style={{ color: 'var(--accent)' }}>抗炎</span>}
+                  </span>
+                  <span style={{ color: 'var(--text-muted)' }}>{it.count} 次 · {it.recipes.length} 菜</span>
+                </div>
+              ))}
+            </div>
+          </StatCard>
+
+          <StatCard title="菜系风味" icon={<Globe size={14} style={{ color: 'var(--accent)' }} />}>
+            <div className="flex flex-col gap-2 mt-1">
+              {Object.entries(stats.cuisineGroups).sort((a, b) => b[1] - a[1]).map(([k, v]) => (
+                <div key={k} className="flex items-center gap-2 text-[11px]">
+                  <span className="w-14 shrink-0 truncate" style={{ color: 'var(--text-secondary)' }}>{k || '未分类'}</span>
+                  <div className="flex-1 h-2 rounded-full" style={{ background: 'var(--bg)' }}>
+                    <div className="h-2 rounded-full" style={{ width: `${Math.round((v / stats.totalMeals) * 100)}%`, background: '#6E8B5A' }} />
+                  </div>
+                  <span className="w-8 text-right" style={{ color: 'var(--text-muted)' }}>{v}</span>
+                </div>
+              ))}
+            </div>
+          </StatCard>
+
+          <StatCard title="重复出现的菜" icon={<Repeat size={14} style={{ color: 'var(--accent)' }} />}>
+            {stats.repeats.length === 0 ? (
+              <p className="text-[11px] mt-1" style={{ color: 'var(--text-muted)' }}>这段时间里没有重复菜，餐桌很丰富。</p>
+            ) : (
+              <div className="flex flex-col gap-1.5 mt-1">
+                {stats.repeats.map((r) => (
+                  <div key={r.recipeId} className="flex items-center justify-between text-[11px]">
+                    <span style={{ color: 'var(--text-secondary)' }}>{r.title}</span>
+                    <span style={{ color: 'var(--text-muted)' }}>{r.count} 次</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </StatCard>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StatCard({ title, icon, children }: { title: string; icon: ReactNode; children: ReactNode }) {
+  return (
+    <div className="rounded-2xl p-4 flex flex-col gap-2" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
+      <div className="flex items-center gap-2">
+        {icon}
+        <span className="text-[12px] font-medium" style={{ color: 'var(--text-primary)' }}>{title}</span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function Number({ value, label }: { value: number; label: string }) {
+  return (
+    <div className="rounded-xl p-3" style={{ background: 'rgba(201,169,110,0.06)' }}>
+      <div className="text-[22px] font-medium" style={{ color: 'var(--accent-dark)', fontFamily: SERIF }}>{value}</div>
+      <div className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{label}</div>
+    </div>
+  );
+}
+
+function ColorDonut({ data }: { data: Record<string, number> }) {
+  const total = Object.values(data).reduce((a, b) => a + b, 0);
+  if (total === 0) return <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>暂无颜色数据。</p>;
+  const colors: Record<string, string> = { 红: '#D94F4F', 橙黄: '#E8A838', 绿: '#6E8B5A', 白: '#CFC8B8', 紫黑: '#6B5B95', 粉棕: '#C9A96E' };
+  let acc = 0;
+  const segments = Object.entries(data).map(([k, v]) => {
+    const start = acc;
+    const frac = v / total;
+    acc += frac;
+    return { label: k, value: v, frac, start, color: colors[k] || 'var(--accent)' };
+  });
+  return (
+    <svg viewBox="0 0 36 36" className="w-24 h-24 self-center mt-2">
+      {segments.map((s) => {
+        const startAngle = s.start * 360;
+        const endAngle = (s.start + s.frac) * 360;
+        const largeArc = s.frac > 0.5 ? 1 : 0;
+        const rad = Math.PI / 180;
+        const x1 = 18 + 14 * Math.cos((startAngle - 90) * rad);
+        const y1 = 18 + 14 * Math.sin((startAngle - 90) * rad);
+        const x2 = 18 + 14 * Math.cos((endAngle - 90) * rad);
+        const y2 = 18 + 14 * Math.sin((endAngle - 90) * rad);
+        const x3 = 18 + 10 * Math.cos((endAngle - 90) * rad);
+        const y3 = 18 + 10 * Math.sin((endAngle - 90) * rad);
+        const x4 = 18 + 10 * Math.cos((startAngle - 90) * rad);
+        const y4 = 18 + 10 * Math.sin((startAngle - 90) * rad);
+        return (
+          <path
+            key={s.label}
+            d={`M ${x1} ${y1} A 14 14 0 ${largeArc} 1 ${x2} ${y2} L ${x3} ${y3} A 10 10 0 ${largeArc} 0 ${x4} ${y4} Z`}
+            fill={s.color}
+          />
+        );
+      })}
+    </svg>
+  );
+}
+
+type RangeMode = 'week' | 'month' | 'custom';
+
+function useStatsRange(K: Kitchen) {
+  const [mode, setMode] = useState<RangeMode>('week');
+  const [custom, setCustom] = useState<{ from: string; to: string }>(() => {
+    const today = new Date();
+    const ws = getWeekStart(today);
+    const from = toDateStr(ws);
+    const to = toDateStr(new Date(ws.getTime() + 6 * 86400000));
+    return { from, to };
+  });
+
+  const { min, max } = useMemo(() => planDateRange(K.plans), [K.plans]);
+
+  const range = useMemo(() => {
+    if (mode === 'week') {
+      const ws = toDateStr(getWeekStart());
+      return { mode, from: ws, to: toDateStr(new Date(new Date(`${ws}T00:00:00`).getTime() + 6 * 86400000)) };
+    }
+    if (mode === 'month') {
+      const today = new Date();
+      const y = today.getFullYear();
+      const m = today.getMonth();
+      const firstDay = new Date(y, m, 1);
+      const lastDay = new Date(y, m + 1, 0);
+      const from = toDateStr(getWeekStart(firstDay));
+      const to = toDateStr(getWeekStart(lastDay));
+      return { mode, from, to };
+    }
+    return { mode, from: custom.from, to: custom.to };
+  }, [mode, custom]);
+
+  const setRange = (next: { mode: RangeMode; from?: string; to?: string }) => {
+    setMode(next.mode);
+    if (next.from && next.to) setCustom({ from: next.from, to: next.to });
+  };
+
+  return { range, setRange, min, max };
 }
 
 /* ============ 小组件 ============ */

@@ -11,8 +11,24 @@ import {
 } from '../lib/mealPlan';
 
 const RECIPES_KEY = 'doris_recipes';
-const PLAN_KEY = 'doris_meal_plan';
+const PLANS_KEY = 'doris_meal_plans';
+const PLAN_KEY = 'doris_meal_plan'; // 旧 key，仅用于迁移
 const CHECKED_KEY = 'doris_shopping_checked';
+
+/** 多周菜单存储：保留最近多少周的 plan（用户要求"起码一个月"，设 8 周 ≈ 两个月，留余量） */
+const MAX_WEEKS = 8;
+
+/** 清理过期的周计划，只保留最近 MAX_WEEKS 周 */
+function cleanPlans(all: Record<string, MealPlan>): Record<string, MealPlan> {
+  const keys = Object.keys(all).sort();
+  if (keys.length <= MAX_WEEKS) return all;
+  const recent = keys.slice(-MAX_WEEKS);
+  const out: Record<string, MealPlan> = {};
+  recent.forEach((k) => {
+    out[k] = all[k];
+  });
+  return out;
+}
 
 /** 根据链接识别来源平台 */
 export function detectPlatform(url: string): RecipePlatform {
@@ -27,23 +43,91 @@ export function detectPlatform(url: string): RecipePlatform {
 
 /**
  * 尝试读取 YouTube 视频标题。
- * 用 noembed.com 做跨域 oEmbed 代理；失败或超时时返回空字符串。
+ * 先走 noembed.com 代理，失败再直连 YouTube oEmbed；失败或超时时返回空字符串。
  */
 async function fetchYouTubeTitle(url: string): Promise<string> {
-  try {
+  const fetchJson = async (endpoint: string): Promise<string> => {
     const controller = new AbortController();
     const t = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(
-      `https://noembed.com/embed?url=${encodeURIComponent(url)}&format=json`,
-      { signal: controller.signal }
-    );
-    clearTimeout(t);
-    if (!res.ok) return '';
-    const data = await res.json();
-    return typeof data.title === 'string' ? data.title.trim() : '';
-  } catch {
-    return '';
-  }
+    try {
+      const res = await fetch(endpoint, { signal: controller.signal });
+      clearTimeout(t);
+      if (!res.ok) return '';
+      const data = await res.json();
+      return typeof data.title === 'string' ? data.title.trim() : '';
+    } catch {
+      return '';
+    }
+  };
+
+  const noembed = await fetchJson(
+    `https://noembed.com/embed?url=${encodeURIComponent(url)}&format=json`
+  );
+  if (noembed) return noembed;
+
+  // fallback：直连 YouTube oEmbed
+  return fetchJson(
+    `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`
+  );
+}
+
+/**
+ * 把 YouTube/B站/抖音 等视频标题洗干净，尽量只剩菜名。
+ * 规则是启发式，不可能 100% 准确；洗完后太短就返回原标题兜底。
+ */
+function cleanVideoTitle(raw: string): string {
+  if (!raw) return '';
+  let s = raw;
+
+  // 1. 去掉成对括号及里面内容（UP主/频道名、标签、字幕说明等）
+  s = s.replace(/\[[^\]]*\]/g, ' ');
+  s = s.replace(/【[^】]*】/g, ' ');
+  s = s.replace(/\([^)]*\)/g, ' ');
+  s = s.replace(/（[^）]*）/g, ' ');
+  s = s.replace(/「[^」]*」/g, ' ');
+  s = s.replace(/『[^』]*』/g, ' ');
+
+  // 2. 按常见分隔符切分，优先保留中文字符最多的那一段（双语标题时更准）
+  const parts = s.split(/[,，。；;、|/·]/).map((p) => p.trim()).filter(Boolean);
+  const mainPart = (parts.length > 1
+    ? parts.reduce((a, b) => {
+        const ca = (a.match(/[\u4e00-\u9fa5]/g) || []).length;
+        const cb = (b.match(/[\u4e00-\u9fa5]/g) || []).length;
+        if (ca !== cb) return ca > cb ? a : b;
+        return a.length >= b.length ? a : b;
+      })
+    : parts[0]) || s;
+
+  // 3. 去掉开头的频道名前缀（小高姐： / 老饭骨· / XXX | ）
+  let t = mainPart.replace(/^[^\u4e00-\u9fa5a-zA-Z]*[^:：·|/]+[:：·|/]+/u, '');
+
+  // 4. 去掉常见英文前缀/后缀
+  const enJunk = ['how to make', 'how to cook', 'easy', 'simple', 'homemade', 'cooking', 'cook', 'recipe', 'recipes', 'tutorial', 'eng sub', 'chinese food', 'chinese', 'full video', 'hd', '4k', 'vlog'];
+  const enRe = new RegExp(`\\b(${enJunk.join('|')})\\b`, 'gi');
+  t = t.replace(enRe, ' ');
+
+  // 5. 去掉常见中文前缀/后缀
+  const cnJunk = ['食谱', '菜谱', '做法', '教程', '怎么做', '如何做', '家常', '简单', '正宗', '传统', '美食', '中式', '台式', '港式', '日式', '韩式', '越式', '泰式', '川式', '广式', '西式', '滇式', '湘式', '鲁式', '苏式', '浙式', '闽式', '徽式', '京式', '东北式'];
+  const cnRe = new RegExp(`(${cnJunk.join('|')})`, 'gi');
+  t = t.replace(cnRe, ' ');
+
+  // 6. 合并连续重复词（常见标题重复菜名：「葱油拌面 如何做葱油拌面」）
+  const tokens = t.split(/\s+/).filter(Boolean);
+  const seen = new Set<string>();
+  const deduped: string[] = [];
+  tokens.forEach((tok) => {
+    const key = tok.toLowerCase().replace(/[\-·.,]/g, '');
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    deduped.push(tok);
+  });
+
+  // 6. 去掉末尾无意义符号
+  let out = deduped.join(' ').replace(/[\-\s·|/,：；;]+$/g, '').trim();
+
+  // 7. 兜底：如果洗完后少于 2 个字符，返回原标题
+  if (!out || out.length < 2) out = raw.trim();
+  return out;
 }
 
 export const PLATFORM_LABEL: Record<RecipePlatform, string> = {
@@ -131,37 +215,53 @@ export function useKitchen() {
     ]);
   };
 
-  /** 批量添加：只需菜名 + 链接。YouTube 链接会自动读取标题。 */
-  const addRecipesByLinks = async (links: { title: string; url: string }[]) => {
+  /** 把链接解析成待确认的菜谱预览（不保存），YouTube 会自动读标题并清洗。 */
+  const previewRecipesByLinks = async (
+    links: { title: string; url: string }[]
+  ): Promise<Omit<Recipe, 'id' | 'createdAt'>[]> => {
     const existing = new Set(recipes.map((r) => r.url));
     const newLinks = links.filter((l) => l.url && !existing.has(l.url));
-    if (newLinks.length === 0) return 0;
 
-    const base = Date.now();
     const titles = await Promise.all(
       newLinks.map(async (l) => {
         if (l.title.trim()) return l.title.trim();
         if (detectPlatform(l.url) === 'youtube') {
           const fetched = await fetchYouTubeTitle(l.url);
-          return fetched || l.title.trim() || '未命名';
+          return cleanVideoTitle(fetched) || l.title.trim() || '未命名';
         }
         return l.title.trim() || '未命名';
       })
     );
 
-    const added: Recipe[] = newLinks.map((l, i) => ({
-      id: base + i,
+    return newLinks.map((l, i) => ({
       title: titles[i],
       url: l.url,
       platform: detectPlatform(l.url),
       ingredients: [],
       status: 'want' as const,
-      createdAt: base + i,
       source: 'video' as const,
     }));
+  };
 
+  /** 批量保存预览后的菜谱（点「确认保存」时才调用） */
+  const addRecipePreviews = (previews: Omit<Recipe, 'id' | 'createdAt'>[]): number => {
+    if (previews.length === 0) return 0;
+    const base = Date.now();
+    const added: Recipe[] = previews.map((p, i) => ({
+      ...p,
+      id: base + i,
+      createdAt: base + i,
+    }));
     setRecipes((prev) => [...added, ...prev]);
     return added.length;
+  };
+
+  /** 批量添加：只需菜名 + 链接。YouTube 链接会自动读取标题。
+   * 现在内部走 preview + addRecipePreviews，保持旧接口不变。
+   */
+  const addRecipesByLinks = async (links: { title: string; url: string }[]) => {
+    const previews = await previewRecipesByLinks(links);
+    return addRecipePreviews(previews);
   };
 
   /**
@@ -199,9 +299,9 @@ export function useKitchen() {
     setRecipes((prev) => prev.map((r) => (r.id === id ? { ...r, ...updates } : r)));
   };
 
-  /** 把若干道菜从本周菜单里彻底摘掉（连同「手动」标记） */
+  /** 把若干道菜从当前周菜单里彻底摘掉（连同「手动」标记） */
   const purgeFromPlan = (ids: Set<number>) => {
-    setPlan((prev) => ({
+    updateCurrentPlan((prev) => ({
       ...prev,
       days: prev.days.map((d) => ({
         ...d,
@@ -281,7 +381,7 @@ export function useKitchen() {
     const alreadyInDay = !!day?.recipeIds.includes(id);
 
     if (!alreadyInDay) {
-      setPlan((prev) => ({
+      updateCurrentPlan((prev) => ({
         ...prev,
         days: prev.days.map((d) =>
           d.date === date
@@ -304,30 +404,87 @@ export function useKitchen() {
     updateRecipe(id, { status: 'cooked', lastCooked: today });
   };
 
-  // ---------- 本周菜单 ----------
-  const [plan, setPlan] = useState<MealPlan>(() => {
+  // ---------- 多周菜单 ----------
+  const thisWeekStart = toDateStr(getWeekStart());
+
+  const [plans, setPlans] = useState<Record<string, MealPlan>>(() => {
     try {
-      const saved = getItem(PLAN_KEY);
+      const saved = getItem(PLANS_KEY);
       if (saved) {
-        const parsed: MealPlan = JSON.parse(saved);
-        // 如果不是本周的，重置为本周
-        if (parsed.weekStart === toDateStr(getWeekStart())) return parsed;
+        const parsed: Record<string, MealPlan> = JSON.parse(saved);
+        const cleaned = cleanPlans(parsed);
+        if (!cleaned[thisWeekStart]) {
+          cleaned[thisWeekStart] = buildEmptyWeek(getWeekStart());
+        }
+        return cleaned;
+      }
+      // 兼容旧版单周数据
+      const old = getItem(PLAN_KEY);
+      if (old) {
+        const parsed: MealPlan = JSON.parse(old);
+        const migrated: Record<string, MealPlan> = {};
+        if (parsed.weekStart) migrated[parsed.weekStart] = parsed;
+        if (!migrated[thisWeekStart]) {
+          migrated[thisWeekStart] = buildEmptyWeek(getWeekStart());
+        }
+        return migrated;
       }
     } catch {
       /* ignore */
     }
-    return buildEmptyWeek(getWeekStart());
+    return { [thisWeekStart]: buildEmptyWeek(getWeekStart()) };
   });
 
+  const [currentWeek, setCurrentWeek] = useState<string>(thisWeekStart);
+
+  const plan = useMemo(
+    () => plans[currentWeek] || buildEmptyWeek(new Date(`${currentWeek}T00:00:00`)),
+    [plans, currentWeek]
+  );
+
   useEffect(() => {
-    setItem(PLAN_KEY, JSON.stringify(plan));
-  }, [plan]);
+    setItem(PLANS_KEY, JSON.stringify(plans));
+  }, [plans]);
+
+  /** 更新当前周的 plan，并写回 plans 字典 */
+  const updateCurrentPlan = (updater: (prev: MealPlan) => MealPlan) => {
+    setPlans((prev) => {
+      const existing = prev[currentWeek] || buildEmptyWeek(new Date(`${currentWeek}T00:00:00`));
+      const next = updater(existing);
+      return { ...prev, [currentWeek]: next };
+    });
+  };
 
   const setDayRecipes = (date: string, recipeIds: number[]) => {
-    setPlan((prev) => ({
+    updateCurrentPlan((prev) => ({
       ...prev,
       days: prev.days.map((d) => (d.date === date ? { ...d, recipeIds } : d)),
     }));
+  };
+
+  /**
+   * 把一道菜谱库里的菜，主动加进当前周的某一天。
+   * 只加不删；如果已经在那天了就返回 false。
+   * 加进去的菜会打上「手动」标记，以后重排不会被冲掉。
+   */
+  const addRecipeToDay = (date: string, recipeId: number): boolean => {
+    const day = plan.days.find((d) => d.date === date);
+    if (!day) return false;
+    if (day.recipeIds.includes(recipeId)) return false;
+
+    updateCurrentPlan((prev) => ({
+      ...prev,
+      days: prev.days.map((d) =>
+        d.date === date
+          ? {
+              ...d,
+              recipeIds: [...d.recipeIds, recipeId],
+              manualIds: Array.from(new Set([...(d.manualIds || []), recipeId])),
+            }
+          : d
+      ),
+    }));
+    return true;
   };
 
   /**
@@ -335,7 +492,7 @@ export function useKitchen() {
    * 你自己点进来的都会打上「手动」标记 —— 以后重排菜单时不会被冲掉。
    */
   const toggleRecipeInDay = (date: string, recipeId: number) => {
-    setPlan((prev) => ({
+    updateCurrentPlan((prev) => ({
       ...prev,
       days: prev.days.map((d) => {
         if (d.date !== date) return d;
@@ -353,21 +510,64 @@ export function useKitchen() {
   };
 
   const setDayCustomText = (date: string, customText: string) => {
-    setPlan((prev) => ({
+    updateCurrentPlan((prev) => ({
       ...prev,
       days: prev.days.map((d) => (d.date === date ? { ...d, customText } : d)),
     }));
   };
 
-  const clearWeek = () => setPlan(buildEmptyWeek(getWeekStart()));
+  /** 清空当前显示的这一周 */
+  const clearWeek = () => updateCurrentPlan(() => buildEmptyWeek(new Date(`${currentWeek}T00:00:00`)));
 
-  const resetToThisWeek = () => setPlan(buildEmptyWeek(getWeekStart()));
+  /** 跳回本周并清空 */
+  const resetToThisWeek = () => {
+    const ws = toDateStr(getWeekStart());
+    setCurrentWeek(ws);
+    setPlans((prev) => ({ ...prev, [ws]: buildEmptyWeek(getWeekStart()) }));
+  };
+
+  /** 切到任意一周（没有就创建空周） */
+  const setWeekStart = (dateStr: string) => {
+    setPlans((prev) => {
+      if (prev[dateStr]) return prev;
+      return { ...prev, [dateStr]: buildEmptyWeek(new Date(`${dateStr}T00:00:00`)) };
+    });
+    setCurrentWeek(dateStr);
+  };
+
+  /** 把一道菜从某天移到另一天，手动标记跟着走 */
+  const moveRecipe = (fromDate: string, toDate: string, recipeId: number): boolean => {
+    const srcDay = plan.days.find((d) => d.date === fromDate);
+    if (!srcDay || !srcDay.recipeIds.includes(recipeId)) return false;
+    if (fromDate === toDate) return true;
+
+    updateCurrentPlan((prev) => ({
+      ...prev,
+      days: prev.days.map((d) => {
+        if (d.date === fromDate) {
+          return {
+            ...d,
+            recipeIds: d.recipeIds.filter((x) => x !== recipeId),
+            manualIds: (d.manualIds || []).filter((x) => x !== recipeId),
+          };
+        }
+        if (d.date === toDate) {
+          const recipeIds = d.recipeIds.includes(recipeId) ? d.recipeIds : [...d.recipeIds, recipeId];
+          const manual = new Set(d.manualIds || []);
+          manual.add(recipeId);
+          return { ...d, recipeIds, manualIds: Array.from(manual) };
+        }
+        return d;
+      }),
+    }));
+    return true;
+  };
 
   /** 排菜入口 —— 算法本体在 computeWeekPlan（抽出去是为了能拿真实数据直接跑验证） */
   const planWeek = (perDay = 2, onlyDate?: string): PlanResult => {
     const pool = recipes.filter((r) => r.status !== 'never');
     if (pool.length === 0) return { ok: false, kept: 0, added: 0 };
-    const weekStart = getWeekStart();
+    const weekStart = new Date(`${currentWeek}T00:00:00`);
     const { days, kept, added } = computeWeekPlan({
       pool,
       planDays: plan.days,
@@ -375,7 +575,7 @@ export function useKitchen() {
       onlyDate,
       weekStart,
     });
-    setPlan({ weekStart: toDateStr(weekStart), days });
+    updateCurrentPlan(() => ({ weekStart: toDateStr(weekStart), days }));
     return { ok: true, kept, added };
   };
 
@@ -390,7 +590,7 @@ export function useKitchen() {
     const src = plan.days.find((d) => d.date === fromDate);
     if (!src || toDates.length === 0) return 0;
     const targets = new Set(toDates);
-    setPlan((prev) => ({
+    updateCurrentPlan((prev) => ({
       ...prev,
       days: prev.days.map((d) =>
         targets.has(d.date)
@@ -480,6 +680,8 @@ export function useKitchen() {
     recipes,
     addRecipe,
     addRecipesByLinks,
+    previewRecipesByLinks,
+    addRecipePreviews,
     importLegacyRecipes,
     updateRecipe,
     deleteRecipe,
@@ -487,14 +689,19 @@ export function useKitchen() {
     addManualDish,
     markCooked,
     plan,
+    plans,
+    currentWeek,
+    setWeekStart,
     setDayRecipes,
     toggleRecipeInDay,
+    addRecipeToDay,
     setDayCustomText,
     clearWeek,
     resetToThisWeek,
     autoPlan,
     rerollDay,
     copyDay,
+    moveRecipe,
     recipeMap,
     plannedRecipes,
     shoppingList,

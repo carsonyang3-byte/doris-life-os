@@ -175,7 +175,8 @@ export function computeWeekPlan(args: {
       let w = 1;
       if (r.status === 'want') w *= 3;
       else if (r.status === 'cooked') w *= 0.8;
-      if (r.source === 'video') w *= 1.5;
+      // 有视频链接的菜（B站/YouTube/小红书/微博/抖音…）优先排进菜单
+      if (r.url) w *= 3;
 
       if (r.lastCooked) {
         const d = daysSince(r.lastCooked);
