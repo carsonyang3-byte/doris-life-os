@@ -137,7 +137,7 @@ if (useSupabase) {
   console.warn('Supabase not configured, using localStorage only');
 }
 
-const supabase = useSupabase ? createClient(SUPABASE_URL!, SUPABASE_KEY!) : null;
+export const supabase = useSupabase ? createClient(SUPABASE_URL!, SUPABASE_KEY!) : null;
 
 let initialized = false;
 

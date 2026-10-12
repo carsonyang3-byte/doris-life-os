@@ -5,7 +5,7 @@ import {
   Plus, Search, Trash2, ExternalLink, Check, X, Copy, Pencil,
   ShoppingCart, Calendar, RotateCcw, Download, AlertTriangle, CornerDownLeft,
   ChevronLeft, ChevronRight, Move, BarChart3, UtensilsCrossed, Beef, Palette,
-  Carrot, Globe, Repeat,
+  Carrot, Globe, Repeat, Camera,
 } from 'lucide-react';
 import type {
   Recipe, RecipePlatform, RecipeStatus, MainIngredient, ProteinTier,
@@ -16,6 +16,7 @@ import {
 } from '../hooks/useKitchen';
 import { toDateStr, getWeekStart } from '../lib/mealPlan';
 import { computeStats, planDateRange } from '../lib/kitchenStats';
+import { supabase } from '../lib/storage';
 
 const SERIF = "'Cormorant Garamond', 'Noto Serif SC', Georgia, serif";
 
@@ -117,6 +118,9 @@ function RecipeLibrary({ K }: { K: Kitchen }) {
   const [addLoading, setAddLoading] = useState(false);
   const [previewList, setPreviewList] = useState<Omit<Recipe, 'id' | 'createdAt'>[]>([]);
   const [showPreview, setShowPreview] = useState(false);
+  const [screenshotLoading, setScreenshotLoading] = useState(false);
+  const [screenshotMsg, setScreenshotMsg] = useState('');
+  const screenshotInputRef = useRef<HTMLInputElement>(null);
   /** 批量删除：勾中的菜谱 id */
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -240,6 +244,87 @@ function RecipeLibrary({ K }: { K: Kitchen }) {
     setPreviewList((prev) => prev.map((p, i) => (i === idx ? { ...p, ...updates } : p)));
   };
 
+  const handleScreenshot = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setScreenshotMsg('请选择图片文件');
+      setTimeout(() => setScreenshotMsg(''), 3000);
+      return;
+    }
+    if (!supabase) {
+      setScreenshotMsg('Supabase 未配置，无法调用截图识别');
+      setTimeout(() => setScreenshotMsg(''), 3000);
+      return;
+    }
+
+    setScreenshotLoading(true);
+    setScreenshotMsg('');
+    try {
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const { data, error } = await supabase.functions.invoke('parse-xiaohongshu', {
+        body: { imageBase64: base64 },
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      const parsed = data as {
+        title?: string;
+        ingredients?: string[];
+        mainIngredient?: string;
+        proteinTier?: 'main' | 'semi' | 'veg';
+        cuisine?: string;
+        tags?: string[];
+        confidence?: number;
+        error?: string;
+      };
+
+      if (parsed.error) {
+        throw new Error(parsed.error);
+      }
+
+      if (!parsed.title || parsed.title === '无法识别') {
+        setScreenshotMsg('没能从这张图里识别出菜谱，换一张试试');
+        setScreenshotLoading(false);
+        if (screenshotInputRef.current) screenshotInputRef.current.value = '';
+        setTimeout(() => setScreenshotMsg(''), 3000);
+        return;
+      }
+
+      const main: MainIngredient = (parsed.mainIngredient as MainIngredient) || 'other';
+      const preview: Omit<Recipe, 'id' | 'createdAt'> = {
+        title: parsed.title,
+        url: '',
+        platform: 'legacy',
+        ingredients: parsed.ingredients || [],
+        mainIngredient: main,
+        proteinTier: parsed.proteinTier || defaultTierOf(main),
+        cuisine: parsed.cuisine || '',
+        tags: parsed.tags || [],
+        status: 'want',
+        source: 'legacy',
+      };
+
+      setPreviewList([preview]);
+      setShowPreview(true);
+      if (screenshotInputRef.current) screenshotInputRef.current.value = '';
+    } catch (err: any) {
+      console.error('截图识别失败:', err);
+      setScreenshotMsg(`识别失败：${err.message || '请重试'}`);
+      setTimeout(() => setScreenshotMsg(''), 5000);
+    } finally {
+      setScreenshotLoading(false);
+    }
+  };
+
   /** 勾中 / 取消勾中一道菜（批量删除用） */
   const toggleSelect = (id: number) => {
     setSelected((prev) => {
@@ -287,6 +372,22 @@ function RecipeLibrary({ K }: { K: Kitchen }) {
             <Plus size={13} />
             收视频
           </button>
+          <button
+            onClick={() => screenshotInputRef.current?.click()}
+            disabled={screenshotLoading}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[12px] font-medium text-white cursor-pointer border-none disabled:opacity-60"
+            style={{ background: '#6E8B5A' }}
+          >
+            <Camera size={13} />
+            {screenshotLoading ? '识别中…' : '截图加菜'}
+          </button>
+          <input
+            ref={screenshotInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleScreenshot}
+            className="hidden"
+          />
           <button
             onClick={handleImportLegacy}
             title="把历史菜谱（135 道）导进菜谱库，按菜名去重"
@@ -415,6 +516,9 @@ function RecipeLibrary({ K }: { K: Kitchen }) {
         {importMsg && (
           <p className="text-[11px] mt-2" style={{ color: 'var(--accent-dark)' }}>{importMsg}</p>
         )}
+        {screenshotMsg && (
+          <p className="text-[11px] mt-2" style={{ color: '#6E8B5A' }}>{screenshotMsg}</p>
+        )}
 
         {showAdd && (
           <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
@@ -478,7 +582,9 @@ function RecipeLibrary({ K }: { K: Kitchen }) {
               </button>
             </div>
             <p className="text-[11px] mb-3" style={{ color: 'var(--text-muted)' }}>
-              YouTube 标题已经自动清洗过，菜名不对的你可以直接改；食材、菜系、主料建议也顺手补上，这样排菜和采购清单才准。
+              {previewList.some((p) => p.url)
+                ? 'YouTube 标题已经自动清洗过，菜名不对的你可以直接改；食材、菜系、主料建议也顺手补上，这样排菜和采购清单才准。'
+                : '截图识别结果不一定准，菜名、食材、菜系、主料请核对后再保存。'}
             </p>
             <div className="flex flex-col gap-3">
               {previewList.map((p, i) => (
@@ -488,18 +594,26 @@ function RecipeLibrary({ K }: { K: Kitchen }) {
                   style={{ background: 'var(--bg)', border: '1px solid var(--border)' }}
                 >
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(201,169,110,0.12)', color: 'var(--accent-dark)' }}>
-                      {PLATFORM_LABEL[p.platform]}
-                    </span>
-                    <a
-                      href={p.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-[10px] truncate max-w-[200px]"
-                      style={{ color: 'var(--text-muted)' }}
-                    >
-                      {p.url}
-                    </a>
+                    {p.url ? (
+                      <>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(201,169,110,0.12)', color: 'var(--accent-dark)' }}>
+                          {PLATFORM_LABEL[p.platform]}
+                        </span>
+                        <a
+                          href={p.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[10px] truncate max-w-[200px]"
+                          style={{ color: 'var(--text-muted)' }}
+                        >
+                          {p.url}
+                        </a>
+                      </>
+                    ) : (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-md" style={{ background: 'rgba(110,139,90,0.12)', color: '#6E8B5A' }}>
+                        截图识别
+                      </span>
+                    )}
                   </div>
                   <input
                     value={p.title}
