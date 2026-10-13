@@ -5,7 +5,7 @@ import {
   Plus, Search, Trash2, ExternalLink, Check, X, Copy, Pencil,
   ShoppingCart, Calendar, RotateCcw, Download, AlertTriangle, CornerDownLeft,
   ChevronLeft, ChevronRight, Move, BarChart3, UtensilsCrossed, Beef, Palette,
-  Carrot, Globe, Repeat, Camera,
+  Carrot, Globe, Repeat,
 } from 'lucide-react';
 import type {
   Recipe, RecipePlatform, RecipeStatus, MainIngredient, ProteinTier,
@@ -16,7 +16,6 @@ import {
 } from '../hooks/useKitchen';
 import { toDateStr, getWeekStart } from '../lib/mealPlan';
 import { computeStats, planDateRange } from '../lib/kitchenStats';
-import { supabase } from '../lib/storage';
 
 const SERIF = "'Cormorant Garamond', 'Noto Serif SC', Georgia, serif";
 
@@ -102,44 +101,6 @@ type Kitchen = ReturnType<typeof useKitchen>;
 
 /* ============ 菜谱库 ============ */
 
-/**
- * 把用户上传的图片统一压缩成 JPEG base64。
- * 解决两个问题：
- * 1. 手机可能选 HEIC/HEIF/WebP，DeepSeek 不一定认
- * 2. 原图可能太大，压缩到最大 1024 宽后请求体小很多
- */
-function compressImageToBase64(file: File, maxWidth = 1024, quality = 0.85): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      const canvas = document.createElement('canvas');
-      let { width, height } = img;
-      if (width > maxWidth) {
-        height = Math.round(height * (maxWidth / width));
-        width = maxWidth;
-      }
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        reject(new Error('浏览器不支持 canvas'));
-        return;
-      }
-      ctx.fillStyle = '#FFFFFF';
-      ctx.fillRect(0, 0, width, height);
-      ctx.drawImage(img, 0, 0, width, height);
-      resolve(canvas.toDataURL('image/jpeg', quality));
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      reject(new Error('图片加载失败'));
-    };
-    img.src = url;
-  });
-}
-
 function RecipeLibrary({ K }: { K: Kitchen }) {
   const [keyword, setKeyword] = useState('');
   const [platform, setPlatform] = useState<RecipePlatform | 'all'>('all');
@@ -156,9 +117,6 @@ function RecipeLibrary({ K }: { K: Kitchen }) {
   const [addLoading, setAddLoading] = useState(false);
   const [previewList, setPreviewList] = useState<Omit<Recipe, 'id' | 'createdAt'>[]>([]);
   const [showPreview, setShowPreview] = useState(false);
-  const [screenshotLoading, setScreenshotLoading] = useState(false);
-  const [screenshotMsg, setScreenshotMsg] = useState('');
-  const screenshotInputRef = useRef<HTMLInputElement>(null);
   /** 批量删除：勾中的菜谱 id */
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -282,83 +240,6 @@ function RecipeLibrary({ K }: { K: Kitchen }) {
     setPreviewList((prev) => prev.map((p, i) => (i === idx ? { ...p, ...updates } : p)));
   };
 
-  const handleScreenshot = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith('image/')) {
-      setScreenshotMsg('请选择图片文件');
-      setTimeout(() => setScreenshotMsg(''), 3000);
-      return;
-    }
-    if (!supabase) {
-      setScreenshotMsg('Supabase 未配置，无法调用截图识别');
-      setTimeout(() => setScreenshotMsg(''), 3000);
-      return;
-    }
-
-    setScreenshotLoading(true);
-    setScreenshotMsg('');
-    try {
-      const base64 = await compressImageToBase64(file);
-
-      const { data, error } = await supabase.functions.invoke('parse-xiaohongshu', {
-        body: { imageBase64: base64 },
-      });
-
-      if (error) {
-        throw error;
-      }
-
-      const parsed = data as {
-        title?: string;
-        ingredients?: string[];
-        mainIngredient?: string;
-        proteinTier?: 'main' | 'semi' | 'veg';
-        cuisine?: string;
-        tags?: string[];
-        confidence?: number;
-        error?: string;
-      };
-
-      if (parsed.error) {
-        throw new Error(parsed.error);
-      }
-
-      if (!parsed.title || parsed.title === '无法识别') {
-        setScreenshotMsg('没能从这张图里识别出菜谱，换一张试试');
-        setScreenshotLoading(false);
-        if (screenshotInputRef.current) screenshotInputRef.current.value = '';
-        setTimeout(() => setScreenshotMsg(''), 3000);
-        return;
-      }
-
-      const main: MainIngredient = (parsed.mainIngredient as MainIngredient) || 'other';
-      const preview: Omit<Recipe, 'id' | 'createdAt'> = {
-        title: parsed.title,
-        url: '',
-        platform: 'legacy',
-        ingredients: parsed.ingredients || [],
-        mainIngredient: main,
-        proteinTier: parsed.proteinTier || defaultTierOf(main),
-        cuisine: parsed.cuisine || '',
-        tags: parsed.tags || [],
-        status: 'want',
-        source: 'legacy',
-      };
-
-      setPreviewList([preview]);
-      setShowPreview(true);
-      if (screenshotInputRef.current) screenshotInputRef.current.value = '';
-    } catch (err: any) {
-      console.error('截图识别失败:', err);
-      setScreenshotMsg(`识别失败：${err.message || '请重试'}`);
-      setTimeout(() => setScreenshotMsg(''), 5000);
-    } finally {
-      setScreenshotLoading(false);
-      if (screenshotInputRef.current) screenshotInputRef.current.value = '';
-    }
-  };
-
   /** 勾中 / 取消勾中一道菜（批量删除用） */
   const toggleSelect = (id: number) => {
     setSelected((prev) => {
@@ -406,22 +287,6 @@ function RecipeLibrary({ K }: { K: Kitchen }) {
             <Plus size={13} />
             收视频
           </button>
-          <button
-            onClick={() => screenshotInputRef.current?.click()}
-            disabled={screenshotLoading}
-            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[12px] font-medium text-white cursor-pointer border-none disabled:opacity-60"
-            style={{ background: '#6E8B5A' }}
-          >
-            <Camera size={13} />
-            {screenshotLoading ? '识别中…' : '截图加菜'}
-          </button>
-          <input
-            ref={screenshotInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleScreenshot}
-            className="hidden"
-          />
           <button
             onClick={handleImportLegacy}
             title="把历史菜谱（135 道）导进菜谱库，按菜名去重"
@@ -549,9 +414,6 @@ function RecipeLibrary({ K }: { K: Kitchen }) {
 
         {importMsg && (
           <p className="text-[11px] mt-2" style={{ color: 'var(--accent-dark)' }}>{importMsg}</p>
-        )}
-        {screenshotMsg && (
-          <p className="text-[11px] mt-2" style={{ color: '#6E8B5A' }}>{screenshotMsg}</p>
         )}
 
         {showAdd && (
