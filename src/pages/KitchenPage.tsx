@@ -102,6 +102,44 @@ type Kitchen = ReturnType<typeof useKitchen>;
 
 /* ============ 菜谱库 ============ */
 
+/**
+ * 把用户上传的图片统一压缩成 JPEG base64。
+ * 解决两个问题：
+ * 1. 手机可能选 HEIC/HEIF/WebP，DeepSeek 不一定认
+ * 2. 原图可能太大，压缩到最大 1024 宽后请求体小很多
+ */
+function compressImageToBase64(file: File, maxWidth = 1024, quality = 0.85): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const canvas = document.createElement('canvas');
+      let { width, height } = img;
+      if (width > maxWidth) {
+        height = Math.round(height * (maxWidth / width));
+        width = maxWidth;
+      }
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('浏览器不支持 canvas'));
+        return;
+      }
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('图片加载失败'));
+    };
+    img.src = url;
+  });
+}
+
 function RecipeLibrary({ K }: { K: Kitchen }) {
   const [keyword, setKeyword] = useState('');
   const [platform, setPlatform] = useState<RecipePlatform | 'all'>('all');
@@ -261,12 +299,7 @@ function RecipeLibrary({ K }: { K: Kitchen }) {
     setScreenshotLoading(true);
     setScreenshotMsg('');
     try {
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
+      const base64 = await compressImageToBase64(file);
 
       const { data, error } = await supabase.functions.invoke('parse-xiaohongshu', {
         body: { imageBase64: base64 },
@@ -322,6 +355,7 @@ function RecipeLibrary({ K }: { K: Kitchen }) {
       setTimeout(() => setScreenshotMsg(''), 5000);
     } finally {
       setScreenshotLoading(false);
+      if (screenshotInputRef.current) screenshotInputRef.current.value = '';
     }
   };
 

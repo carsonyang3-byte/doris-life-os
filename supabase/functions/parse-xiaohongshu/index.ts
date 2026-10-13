@@ -1,12 +1,9 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-
 const DEEPSEEK_API_KEY = Deno.env.get('DEEPSEEK_API_KEY')
 const DEEPSEEK_URL = 'https://api.deepseek.com/chat/completions'
 const MODEL = 'deepseek-v4-flash-vision-exp'
 
-// 允许的图片格式与 MIME 类型（DeepSeek 会从内容检测，但 data URL 需要正确的 MIME 前缀）
 const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-const MAX_IMAGE_SIZE = 32 * 1024 * 1024 // 32 MiB，DeepSeek inline 限制
+const MAX_IMAGE_SIZE = 32 * 1024 * 1024
 
 interface RecipePayload {
   title: string
@@ -18,7 +15,6 @@ interface RecipePayload {
   confidence: number
 }
 
-// 把前端可能传过来的各种主料写法归一化
 const MAIN_INGREDIENTS = [
   'pork', 'beef', 'lamb', 'chicken', 'duck_goose',
   'fish', 'shellfish', 'egg', 'tofu', 'mushroom', 'leafy', 'other',
@@ -75,7 +71,7 @@ function errorResponse(message: string, status = 500): Response {
   return jsonResponse({ error: message }, status)
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: corsHeaders() })
   }
@@ -90,10 +86,9 @@ serve(async (req) => {
       return errorResponse('缺少图片或格式错误', 400)
     }
 
-    // 去掉可能的前缀，得到纯 base64
     let cleanBase64 = imageBase64
     let mimeType = 'image/jpeg'
-    const match = imageBase64.match(/^data:([a-zA-Z0-9+/\-]+);base64,/)
+    const match = imageBase64.match(/^data:([a-zA-Z0-9+/-]+);base64,/)
     if (match) {
       mimeType = match[1].toLowerCase()
       cleanBase64 = imageBase64.slice(match[0].length)
@@ -103,13 +98,12 @@ serve(async (req) => {
       return errorResponse(`不支持的图片格式：${mimeType}，请用 JPEG/PNG/GIF/WebP`, 400)
     }
 
-    // 校验 base64 大小（解码前大约 ×0.75 就是实际大小）
     const estimatedSize = Math.floor(cleanBase64.length * 0.75)
     if (estimatedSize > MAX_IMAGE_SIZE) {
       return errorResponse(`图片太大（${Math.round(estimatedSize / 1024 / 1024)}MB），请压缩到 32MB 以下`, 413)
     }
 
-    const prompt = `这是一张小红书做菜笔记的截图。请仔细阅读图片中的文字和食材，提取菜谱信息并以 JSON 格式返回，不要任何解释，只返回 JSON：
+    const prompt = `这是一张做菜笔记的截图。请仔细阅读图片中的文字和食材，提取菜谱信息并以 JSON 格式返回，不要任何解释，只返回 JSON：
 {
   "title": "菜名",
   "ingredients": ["食材1", "食材2"],
