@@ -25,6 +25,11 @@ SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 SUPABASE_TABLE = "app_data"
 STORAGE_KEY = "garmin_health"
+AI_STORAGE_KEY = "garmin_ai_insight"
+
+DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
+DEEPSEEK_URL = "https://api.deepseek.com/chat/completions"
+DEEPSEEK_MODEL = "deepseek-chat"
 
 if not EMAIL or not PASSWORD:
     print("错误：缺少 GARMIN_EMAIL / GARMIN_PASSWORD 环境变量")
@@ -219,6 +224,19 @@ def main():
         json.dump(out, f, ensure_ascii=False, indent=2)
     print("已输出 health_data.json")
 
+    # ===== 8. AI 洞察（真 LLM 交叉分析）=====
+    if DEEPSEEK_API_KEY:
+        ai = generate_ai_insight(out)
+        if ai:
+            # 与健康数据一起上传（也单独存一份，前端直接读）
+            if SUPABASE_URL and SUPABASE_KEY:
+                upload_to_supabase(ai, key=AI_STORAGE_KEY)
+            with open("ai_insight.json", "w", encoding="utf-8") as f:
+                json.dump(ai, f, ensure_ascii=False, indent=2)
+            print("AI 洞察已生成")
+    else:
+        print("未配置 DEEPSEEK_API_KEY，跳过 AI 洞察")
+
     # 上传到 Supabase（如果配置了）
     if SUPABASE_URL and SUPABASE_KEY:
         upload_to_supabase(out)
@@ -226,7 +244,7 @@ def main():
         print("未配置 Supabase，跳过上传")
 
 
-def upload_to_supabase(data):
+def upload_to_supabase(data, key=STORAGE_KEY):
     base = f"{SUPABASE_URL}/rest/v1"
     headers = {
         "apikey": SUPABASE_KEY,
@@ -235,20 +253,118 @@ def upload_to_supabase(data):
         "Prefer": "resolution=merge-duplicates",
     }
     payload = {
-        "key": STORAGE_KEY,
+        "key": key,
         "value": json.dumps(data, ensure_ascii=False),
         "updated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
     }
-    url = f"{base}/{SUPABASE_TABLE}?key=eq.{STORAGE_KEY}"
+    url = f"{base}/{SUPABASE_TABLE}?key=eq.{key}"
     resp = requests.put(url, headers=headers, json=payload, timeout=20)
     # 200/201/204 都算成功（204 = 无响应体但合并成功）
     if resp.status_code in (200, 201, 204):
-        print(f"已上传到 Supabase key={STORAGE_KEY} (status {resp.status_code})")
+        print(f"已上传到 Supabase key={key} (status {resp.status_code})")
         return
     print(f"PUT 失败 ({resp.status_code})，尝试 POST")
     resp = requests.post(f"{base}/{SUPABASE_TABLE}", headers=headers, json=payload, timeout=20)
     resp.raise_for_status()
-    print(f"已上传到 Supabase key={STORAGE_KEY}")
+    print(f"已上传到 Supabase key={key}")
+
+
+def generate_ai_insight(data):
+    """
+    把 90 天健康数据 + 经期 + 症状拼成上下文，调用 DeepSeek 出真 AI 洞察。
+    返回 {"generatedAt": ..., "content": ...}，失败返回 None。
+    """
+    today = dt.date.today()
+    days = data.get("days", [])
+    # 近 7 天 / 近 30 天汇总
+    def recent(n):
+        return [d for d in days if d.get("date", "") >= (today - dt.timedelta(days=n)).isoformat()]
+
+    d7 = recent(7)
+    d30 = recent(30)
+
+    def avg(key, arr):
+        vals = [d[key] for d in arr if d.get(key) is not None]
+        return round(sum(vals) / len(vals), 1) if vals else None
+
+    # 构造结构化摘要
+    summary = {
+        "今天": days[-1] if days else {},
+        "近7天平均": {
+            "静息心率": avg("restingHR", d7),
+            "睡眠小时": avg("sleepH", d7),
+            "睡眠评分": avg("sleepScore", d7),
+            "压力": avg("stress", d7),
+            "步数": avg("steps", d7),
+        },
+        "近30天平均": {
+            "静息心率": avg("restingHR", d30),
+            "睡眠小时": avg("sleepH", d30),
+            "睡眠评分": avg("sleepScore", d30),
+            "压力": avg("stress", d30),
+            "步数": avg("steps", d30),
+        },
+        "活动统计": data.get("activity", {}),
+        "跑步配速趋势": data.get("runPace", []),
+        "身体年龄": data.get("fitnessAge"),
+        "实际年龄": data.get("chronoAge"),
+        "VO2max": data.get("vo2max"),
+        "经期周期": data.get("cycle", {}),
+        "症状统计": data.get("symptoms", []),
+        "症状记录天数": data.get("symptomDays", 0),
+        "目标进度": data.get("goals", []),
+    }
+
+    prompt = f"""你是一位懂运动生理、睡眠、女性激素周期与恢复的私人健康教练。下面是用户（女性，44岁）最近 90 天 Garmin 手表的真实健康数据摘要。
+
+请基于这些数据做**跨指标交叉分析**，重点把以下维度联系起来看：
+1. 睡眠质量 / 静息心率 / 压力 与 训练量（跑步、力量）的关系
+2. 经期阶段（卵泡期/排卵期/黄体期/经期）与睡眠、心率、训练表现、症状的关联
+3. 跑步配速的进步或停滞，以及身体年龄 / VO2max 反映的心肺状态
+4. 症状（背痛、疲劳、失眠等）出现的时机与周期的关系
+
+不要泛泛而谈，不要罗列数据。要有真正的因果推断和可执行的建议。如果某点数据不足，直接说"数据还看不出明确模式"，不要硬编。
+
+数据摘要（JSON）：
+{json.dumps(summary, ensure_ascii=False, indent=1)}
+
+输出要求：
+- 用中文，口语化但有专业感，像一位真正了解她的教练在说话，不是 AI 报告腔。
+- 禁止 emoji。
+- 严格按下面 4 段输出，每段用「**标题**」开头，每段 80~160 字：
+
+**今天的身体状态**
+**这周的趋势**
+**周期与身体的关联**
+**接下来一周的建议**
+"""
+
+    try:
+        resp = requests.post(
+            DEEPSEEK_URL,
+            headers={
+                "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": DEEPSEEK_MODEL,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.7,
+                "max_tokens": 1200,
+            },
+            timeout=60,
+        )
+        resp.raise_for_status()
+        content = resp.json()["choices"][0]["message"]["content"].strip()
+        return {
+            "generatedAt": today.isoformat(),
+            "generatedAtLabel": f"{today.month}月{today.day}日",
+            "content": content,
+            "model": DEEPSEEK_MODEL,
+        }
+    except Exception as e:
+        print(f"AI 洞察生成失败：{e}")
+        return None
 
 
 if __name__ == "__main__":

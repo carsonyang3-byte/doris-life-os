@@ -3,8 +3,8 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   LineChart, Line, Cell,
 } from 'recharts';
-import { HeartPulse, Activity, Footprints, Moon, Flame, Droplets, Timer } from 'lucide-react';
-import { useGarminHealth } from '../hooks/useGarminHealth';
+import { HeartPulse, Activity, Footprints, Moon, Flame, Droplets, Timer, Sparkles } from 'lucide-react';
+import { useGarminHealth, useGarminAIInsight } from '../hooks/useGarminHealth';
 
 // ===== 运动总览：近7天 / 近30天 / 近90天 =====
 type RangeKey = 'week' | 'month' | 'total';
@@ -136,6 +136,48 @@ function Advice({ children }: { children: React.ReactNode }) {
   );
 }
 
+// ===== AI 洞察渲染：把 **标题** 分段，标题高亮、正文正常 =====
+function AIInsightBlock({ content, generatedAtLabel }: { content: string; generatedAtLabel?: string }) {
+  // 按 **标题** 切段
+  const parts = content.split(/\*\*([^*]+)\*\*/);
+  const sections: { title: string; body: string }[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    const p = parts[i];
+    if (i % 2 === 1) {
+      // 是标题（**之间的内容**）
+      const title = p.trim();
+      const body = (parts[i + 1] || '').trim();
+      sections.push({ title, body });
+      i++;
+    } else if (p.trim()) {
+      // 无标题的开头段落
+      sections.push({ title: '', body: p.trim() });
+    }
+  }
+
+  return (
+    <div className="bg-[var(--bg-card)] rounded-2xl p-5 shadow-[var(--shadow)] mt-2">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <span style={{ color: 'var(--accent)' }}><Sparkles size={14} /></span>
+          <span className="text-[12px] font-semibold uppercase tracking-[0.1em]" style={{ color: 'var(--accent-dark)' }}>AI 洞察</span>
+        </div>
+        {generatedAtLabel && <span className="text-[11px] text-[var(--text-muted)]">更新于 {generatedAtLabel}</span>}
+      </div>
+      <div className="space-y-3">
+        {sections.map((s, idx) => (
+          <div key={idx}>
+            {s.title && (
+              <div className="text-[13px] font-semibold mb-1" style={{ color: 'var(--accent-dark)' }}>{s.title}</div>
+            )}
+            <p className="text-[13px] leading-[1.75] text-[var(--text-primary)] whitespace-pre-wrap">{s.body}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ===== 辅助函数（从云端数据计算） =====
 function avgOf(cloud: ReturnType<typeof useGarminHealth>, n: number, key: string): number {
   const days = cloud?.days?.slice(-n) || [];
@@ -171,6 +213,7 @@ function runInsight(cloud: ReturnType<typeof useGarminHealth>, range: 'week' | '
 export default function HealthPage() {
   const [range, setRange] = useState<RangeKey>('total');
   const cloud = useGarminHealth();
+  const aiInsight = useGarminAIInsight();
 
   // 活动总览：优先用云端数据，无则用写死兜底
   const act = useMemo(() => {
@@ -237,6 +280,11 @@ export default function HealthPage() {
         <h1 className="text-[28px] font-light tracking-[0.1em] uppercase mt-0.5" style={{ fontFamily: "'Cormorant Garamond', 'Noto Serif SC', Georgia, serif" }}>My Body</h1>
         <div className="text-[12px] text-[var(--text-muted)] mt-0.5" style={{ fontStyle: 'italic', letterSpacing: '0.02em' }}>Listen to your body and keep moving.</div>
       </div>
+
+      {/* ===== AI 洞察（DeepSeek 每日自动生成）===== */}
+      {aiInsight?.content ? (
+        <AIInsightBlock content={aiInsight.content} generatedAtLabel={aiInsight.generatedAtLabel} />
+      ) : null}
 
       {/* ===== 今天 · 重点关注 ===== */}
       <Section icon={<HeartPulse size={14} />} title="今天 · 重点关注" />
