@@ -154,7 +154,7 @@ export default function HealthPage() {
       <div className="mb-1">
         <div className="text-[11px] tracking-[0.16em] uppercase font-medium" style={{ color: 'var(--accent-dark)' }}>10月29日</div>
         <h1 className="text-[28px] font-light tracking-[0.1em] uppercase mt-0.5" style={{ fontFamily: "'Cormorant Garamond', 'Noto Serif SC', Georgia, serif" }}>My Body</h1>
-        <div className="text-[12px] text-[var(--text-muted)] mt-0.5">今天 · 本周 · 本月 · 运动 · 周期 · 目标</div>
+        <div className="text-[12px] text-[var(--text-muted)] mt-0.5" style={{ fontStyle: 'italic', letterSpacing: '0.02em' }}>Listen to your body and keep moving.</div>
       </div>
 
       {/* ===== 今天 · 重点关注 ===== */}
