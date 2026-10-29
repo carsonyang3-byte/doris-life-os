@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI 洞察测试</title>
+  <style>
+    body { font-family: -apple-system, sans-serif; padding: 20px; max-width: 600px; margin: 0 auto; }
+    #status { color: #666; margin-bottom: 10px; }
+    #content { background: #f5f5f0; padding: 16px; border-radius: 12px; line-height: 1.7; white-space: pre-wrap; }
+    .err { color: #c0392b; }
+  </style>
+</head>
+<body>
+  <h2>AI 洞察数据测试</h2>
+  <div id="status">正在读取云端数据...</div>
+  <div id="content"></div>
+
+  <script type="module">
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+    const URL = 'https://vlbckhntmumxwqxikdur.supabase.co';
+    const KEY = 'sb_publishable_Ufh-L2uqBMf38q8m0D7Iew_2S96t7df';
+    const supabase = createClient(URL, KEY);
+
+    try {
+      const { data: rows, error } = await supabase
+        .from('app_data')
+        .select('value')
+        .eq('key', 'garmin_ai_insight')
+        .maybeSingle();
+
+      if (error) {
+        document.getElementById('status').innerHTML = '<span class="err">读取失败：' + error.message + '</span>';
+      } else if (!rows || !rows.value) {
+        document.getElementById('status').innerHTML = '<span class="err">没有数据</span>';
+      } else {
+        const parsed = JSON.parse(rows.value);
+        document.getElementById('status').innerHTML = '读取成功！更新时间：' + parsed.generatedAtLabel;
+        document.getElementById('content').textContent = parsed.content;
+      }
+    } catch (e) {
+      document.getElementById('status').innerHTML = '<span class="err">异常：' + e.message + '</span>';
+    }
+  </script>
+</body>
+</html>
