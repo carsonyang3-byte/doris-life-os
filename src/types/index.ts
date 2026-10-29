@@ -74,7 +74,7 @@ export interface Quote {
   author: string;
 }
 
-export type PageType = 'dashboard' | 'reflect' | 'goals' | 'library' | 'journal' | 'money' | 'travel' | 'kitchen' | 'settings';
+export type PageType = 'dashboard' | 'reflect' | 'goals' | 'library' | 'journal' | 'money' | 'travel' | 'kitchen' | 'health' | 'settings';
 
 /** 单条微信读书划线（与 Library 中书关联） */
 export interface WereadHighlightEntry {

@@ -9,6 +9,7 @@ import MoneyPage from './pages/MoneyPage';
 import JournalPage from './pages/JournalPage';
 import TravelPage from './pages/TravelPage';
 import KitchenPage from './pages/KitchenPage';
+import HealthPage from './pages/HealthPage';
 import SettingsPage from './pages/SettingsPage';
 import { VisionEngineProvider } from './hooks/useVisionEngineContext';
 import type { PageType } from './types';
@@ -89,6 +90,7 @@ function App() {
         {activePage === 'journal' && <JournalPage />}
         {activePage === 'travel' && <TravelPage />}
         {activePage === 'kitchen' && <KitchenPage />}
+        {activePage === 'health' && <HealthPage />}
         {activePage === 'settings' && <SettingsPage />}
       </Layout>
     </VisionEngineProvider>
